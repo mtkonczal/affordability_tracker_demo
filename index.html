@@ -503,10 +503,11 @@
     <p class="hero-eyebrow">Economic Dashboard</p>
     <h1>Affordability <span>Tracker</span></h1>
     <p class="hero-desc">
-      Every household budget is shaped by a handful of stubborn costs — groceries,
-      gas, insurance, and mortgages. This tracker pulls those numbers directly
-      from federal data sources and puts them in one place, so you can see not just
-      where prices stand today but how they've moved over time.
+      Prices don't feel abstract when you're at the pump or the checkout line.
+      This tracker cuts through the noise — pulling grocery prices, gas, car
+      insurance, and mortgage rates straight from federal data — so you can see
+      exactly what's changed, by how much, and over what span of time. No
+      subscriptions, no paywalls: just the numbers.
     </p>
     <div class="hero-meta">
       <span class="hero-badge">
@@ -588,9 +589,17 @@ const CATEGORIES = {
     label:    "Labor Market",
     subtitle: "Employment, wages, and job market conditions — the income side of affordability.",
     accent:   "#0891B2",
+    hidden:   true,   // set to false to activate the tab when ready
   },
-  // Add future categories below, e.g.:
-  // housing: { label: "Housing", subtitle: "...", accent: "#10B981" },
+  // ── Add future categories here ──────────────────────────────────────────────
+  // Copy the block below, fill in the fields, set hidden: false to show the tab.
+  //
+  // housing: {
+  //   label:   "Housing",
+  //   subtitle: "Home prices, rents, and related costs.",
+  //   accent:  "#10B981",
+  //   hidden:  false,
+  // },
 };
 
 // Preserve insertion order for tab display
@@ -671,10 +680,11 @@ function renderScorecard() {
 
   grid.innerHTML = "";
 
-  // All series in category order
-  const items = CATEGORY_ORDER.flatMap(catId =>
-    Object.values(data).filter(d => d.category === catId)
-  );
+  // All series in category order, excluding hidden categories
+  const items = CATEGORY_ORDER.flatMap(catId => {
+    if (CATEGORIES[catId] && CATEGORIES[catId].hidden) return [];
+    return Object.values(data).filter(d => d.category === catId);
+  });
 
   items.forEach(item => {
     const cat = CATEGORIES[item.category];
@@ -930,6 +940,7 @@ function buildTabs() {
 
   CATEGORY_ORDER.forEach(catId => {
     const cat   = CATEGORIES[catId];
+    if (cat.hidden) return;   // category marked hidden until ready
     const count = Object.values(data).filter(d => d.category === catId).length;
     if (count === 0) return;  // hide tab if no data
 
