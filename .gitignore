@@ -1,0 +1,6 @@
+.Rhistory
+.RData
+.Rapp.history
+*.Rproj
+.DS_Store
+.claude/
