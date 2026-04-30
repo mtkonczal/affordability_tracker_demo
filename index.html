@@ -83,128 +83,176 @@ function fmtVal(val, units = '') {
   return val.toFixed(1);
 }
 
-// Lazy-load html-to-image once
-let htmlToImagePromise = null;
-function loadHtmlToImage() {
-  if (htmlToImagePromise) return htmlToImagePromise;
-  htmlToImagePromise = new Promise((resolve, reject) => {
-    if (window.htmlToImage) return resolve(window.htmlToImage);
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.13/dist/html-to-image.min.js';
-    s.onload = () => resolve(window.htmlToImage);
-    s.onerror = reject;
-    document.head.appendChild(s);
-  });
-  return htmlToImagePromise;
-}
-
-// Wraps a card node with an ESP brand strip + title block, snapshots to PNG.
-async function downloadCardAsPNG(node, item) {
-  const lib = await loadHtmlToImage();
-
-  // Snapshot live canvases first — cloned canvases have no pixel data, so
-  // we serialize each one to a PNG data URL and swap in <img> in the clone.
-  const liveCanvases = Array.from(node.querySelectorAll('canvas'));
-  const canvasImages = liveCanvases.map(c => {
-    try { return c.toDataURL('image/png'); } catch (e) { return null; }
-  });
-
-  const clone = node.cloneNode(true);
-  const clonedCanvases = Array.from(clone.querySelectorAll('canvas'));
-  clonedCanvases.forEach((cc, i) => {
-    const dataUrl = canvasImages[i];
-    if (!dataUrl) return;
-    const img = document.createElement('img');
-    img.src = dataUrl;
-    const w = liveCanvases[i].clientWidth;
-    const h = liveCanvases[i].clientHeight;
-    img.style.cssText = `display: block; width: ${w}px; height: ${h}px;`;
-    cc.replaceWith(img);
-  });
-
-  // Strip the action buttons from the clone — they shouldn't appear in the export.
-  clone.querySelectorAll('[data-export-hide]').forEach(el => el.remove());
-
-  const wrap = document.createElement('div');
-  wrap.style.cssText = `
-    position: fixed; left: -10000px; top: 0;
-    width: 720px; padding: 32px 36px 28px;
-    background: #FBF7EE;
-    font-family: 'Neue Haas Grotesk Display Pro', sans-serif;
-  `;
-
-  // ESP brand strip header
-  const header = document.createElement('div');
-  header.style.cssText = `
-    display: flex; align-items: center; justify-content: space-between;
-    padding-bottom: 14px; margin-bottom: 18px;
-    border-bottom: 1px solid rgba(27,42,78,.18);
-  `;
-  header.innerHTML = `
-    <div style="display: flex; align-items: center; gap: 12px;">
-      <div style="
-        width: 26px; height: 26px; background: #1B2A4E;
-        display: flex; align-items: center; justify-content: center;
-        color: #FBF7EE; font-family: 'Publico, Georgia, serif';
-        font-size: 16px; font-weight: 600; letter-spacing: -0.02em;
-      ">E</div>
-      <div>
-        <div style="
-          font-size: 13px; font-weight: 700; color: #1B2A4E;
-          letter-spacing: 0.02em;
-        ">Economic Security Project</div>
-        <div style="
-          font-size: 10px; font-weight: 600; color: #6B6E78;
-          letter-spacing: .14em; text-transform: uppercase; margin-top: 2px;
-        ">The Affordability Tracker</div>
-      </div>
-    </div>
-    <div style="
-      font-size: 10px; font-weight: 600; color: #6B6E78;
-      letter-spacing: .14em; text-transform: uppercase; text-align: right;
-    ">
-      ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-    </div>
-  `;
-  wrap.appendChild(header);
-
-  // The card clone
-  clone.style.background = 'transparent';
-  wrap.appendChild(clone);
-
-  // Footer attribution
-  const footer = document.createElement('div');
-  footer.style.cssText = `
-    margin-top: 16px; padding-top: 12px;
-    border-top: 1px solid rgba(27,42,78,.1);
-    display: flex; justify-content: space-between;
-    font-size: 10px; color: #6B6E78;
-    font-family: 'Neue Haas Grotesk Display Pro', sans-serif;
-    letter-spacing: .08em; text-transform: uppercase;
-  `;
-  footer.innerHTML = `
-    <span>economicsecurityproject.org</span>
-    <span>Source · FRED · ${item.fred_id}</span>
-  `;
-  wrap.appendChild(footer);
-
-  document.body.appendChild(wrap);
-
-  try {
-    const dataUrl = await lib.toPng(wrap, {
-      pixelRatio: 2,
-      backgroundColor: '#FBF7EE',
-      cacheBust: true,
-    });
-    const a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = `${item.id}-${item.fred_id}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  } finally {
-    document.body.removeChild(wrap);
+// Render the card to a branded PNG by drawing directly to a canvas.
+// We avoid html-to-image / DOM-cloning approaches because they were
+// producing blank captures (font fallbacks not surviving the clone,
+// data-URL <img> elements not decoding before snapshot, foreignObject
+// CORS quirks). Drawing the chart canvas + text on a fresh canvas is
+// deterministic and needs no external library.
+async function downloadCardAsPNG({
+  chartCanvas, item, accent, headlineText, changeText, changeColor, rangeLabel,
+}) {
+  if (document.fonts && document.fonts.ready) {
+    try { await document.fonts.ready; } catch (e) {}
   }
+
+  // 2x for retina-grade output; final PNG is 1440 × 1080.
+  const SCALE = 2;
+  const W = 1440, H = 1080;
+  const canvas = document.createElement('canvas');
+  canvas.width  = W * SCALE;
+  canvas.height = H * SCALE;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(SCALE, SCALE);
+  ctx.textBaseline = 'alphabetic';
+
+  const PAPER = '#FBF7EE';
+  const INK   = '#0E1320';
+  const NAVY  = '#1B2A4E';
+  const MUTE  = '#6B6E78';
+  const SOFT  = '#9A9CA3';
+  const SERIF   = '"Source Serif 4", Georgia, serif';
+  const DISPLAY = '"Inter Tight", system-ui, sans-serif';
+
+  // Background
+  ctx.fillStyle = PAPER;
+  ctx.fillRect(0, 0, W, H);
+
+  // ── Header band ─────────────────────────────────────────────────────────
+  const padX = 80;
+
+  // Logo box ("E")
+  ctx.fillStyle = NAVY;
+  ctx.fillRect(padX, 80, 56, 56);
+  ctx.fillStyle = PAPER;
+  ctx.font = `600 36px ${SERIF}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('E', padX + 28, 80 + 30);
+  ctx.textBaseline = 'alphabetic';
+
+  // Brand wordmark
+  ctx.textAlign = 'left';
+  ctx.fillStyle = NAVY;
+  ctx.font = `700 28px ${DISPLAY}`;
+  ctx.fillText('Economic Security Project', padX + 76, 110);
+  ctx.fillStyle = MUTE;
+  ctx.font = `600 14px ${DISPLAY}`;
+  ctx.fillText('THE AFFORDABILITY TRACKER', padX + 76, 134);
+
+  // Date (right side)
+  ctx.textAlign = 'right';
+  ctx.fillStyle = MUTE;
+  ctx.font = `600 14px ${DISPLAY}`;
+  const today = new Date().toLocaleDateString('en-US', {
+    month: 'long', day: 'numeric', year: 'numeric',
+  }).toUpperCase();
+  ctx.fillText(today, W - padX, 134);
+
+  // Header divider
+  ctx.strokeStyle = 'rgba(27,42,78,.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padX, 180);
+  ctx.lineTo(W - padX, 180);
+  ctx.stroke();
+
+  // ── Card area ───────────────────────────────────────────────────────────
+  const cardTop = 220;
+
+  // Top accent bar (brand color of this series)
+  ctx.fillStyle = accent;
+  ctx.fillRect(padX, cardTop, W - padX * 2, 4);
+
+  // Eyebrow
+  const eyebrow = (item.category === 'labor'     ? 'Income'
+                : item.category === 'daily'      ? 'Daily'
+                : item.category === 'groceries'  ? 'Groceries'
+                                                 : 'Big-ticket').toUpperCase();
+  ctx.textAlign = 'left';
+  ctx.fillStyle = accent;
+  ctx.font = `700 18px ${DISPLAY}`;
+  ctx.fillText(eyebrow, padX, cardTop + 50);
+
+  // Title (auto-shrink if it would collide with the right-side headline)
+  const headlineRightWidth = (() => {
+    ctx.font = `500 76px ${SERIF}`;
+    return ctx.measureText(headlineText).width;
+  })();
+  const titleMaxWidth = (W - padX * 2) - headlineRightWidth - 60;
+  let titleSize = 56;
+  ctx.fillStyle = INK;
+  for (; titleSize >= 32; titleSize -= 2) {
+    ctx.font = `500 ${titleSize}px ${SERIF}`;
+    if (ctx.measureText(item.label).width <= titleMaxWidth) break;
+  }
+  ctx.fillText(item.label, padX, cardTop + 110);
+
+  // Subtitle
+  if (item.subtitle) {
+    ctx.fillStyle = MUTE;
+    ctx.font = `italic 22px ${SERIF}`;
+    ctx.fillText(item.subtitle, padX, cardTop + 145);
+  }
+
+  // Headline value (right side)
+  ctx.textAlign = 'right';
+  ctx.fillStyle = INK;
+  ctx.font = `500 76px ${SERIF}`;
+  ctx.fillText(headlineText, W - padX, cardTop + 110);
+
+  // Change line under headline
+  ctx.fillStyle = changeColor || accent;
+  ctx.font = `700 22px ${DISPLAY}`;
+  ctx.fillText(changeText, W - padX, cardTop + 145);
+
+  // ── Chart ───────────────────────────────────────────────────────────────
+  if (chartCanvas) {
+    let chartUrl = null;
+    try { chartUrl = chartCanvas.toDataURL('image/png'); } catch (e) {}
+    if (chartUrl) {
+      const img = new Image();
+      await new Promise((resolve) => {
+        img.onload = resolve;
+        img.onerror = resolve; // never block the export on a chart fail
+        img.src = chartUrl;
+      });
+      const chartX = padX, chartY = cardTop + 200;
+      const chartW = W - padX * 2, chartH = 540;
+      ctx.drawImage(img, chartX, chartY, chartW, chartH);
+    }
+  }
+
+  // ── Footer ──────────────────────────────────────────────────────────────
+  const footerY = H - 50;
+  ctx.strokeStyle = 'rgba(27,42,78,.12)';
+  ctx.beginPath();
+  ctx.moveTo(padX, footerY - 28);
+  ctx.lineTo(W - padX, footerY - 28);
+  ctx.stroke();
+
+  ctx.fillStyle = MUTE;
+  ctx.font = `600 13px ${DISPLAY}`;
+  ctx.textAlign = 'left';
+  ctx.fillText('ECONOMICSECURITYPROJECT.ORG', padX, footerY);
+  ctx.textAlign = 'right';
+  ctx.fillText(`SOURCE · FRED · ${item.fred_id}`, W - padX, footerY);
+
+  // Trigger download
+  await new Promise((resolve) => {
+    canvas.toBlob((blob) => {
+      if (!blob) return resolve();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${item.id}-${item.fred_id}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      resolve();
+    }, 'image/png');
+  });
 }
 
 function downloadCSV(item) {
@@ -878,10 +926,24 @@ function ChartCard({ item, since }) {
           >↓ CSV</button>
           <button
             onClick={async () => {
-              if (cardRef.current) {
-                try { await downloadCardAsPNG(cardRef.current, item); }
-                catch (err) { console.error('PNG export failed', err); }
-              }
+              const chartCanvas = cardRef.current?.querySelector('canvas');
+              const headlineText = item.rebase
+                ? (headlineVal >= 0 ? '+' : '') + headlineVal.toFixed(1) + '%'
+                : fmtVal(headlineVal, displayUnits);
+              const rangeLabel = activeRange.id === '2020' ? 'since 2020'
+                : activeRange.id === '2025' ? 'since 2025'
+                : activeRange.id === 'Max'  ? 'all-time'
+                : `over ${activeRange.label}`;
+              const changeText = item.rebase
+                ? (up ? '↑ ' : '↓ ') + rangeLabel
+                : (up ? '↑ +' : '↓ ') + Math.abs(change || 0).toFixed(1) + '% ' + rangeLabel;
+              const changeColor = up ? WARM_RED : '#2E7D5B';
+              try {
+                await downloadCardAsPNG({
+                  chartCanvas, item, accent,
+                  headlineText, changeText, changeColor, rangeLabel,
+                });
+              } catch (err) { console.error('PNG export failed', err); }
             }}
             style={{
               fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
