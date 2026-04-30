@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Affordability Tracker</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Chart.js + Date adapter -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+  <style>
+    /* ── Reset & base ───────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #F1F5F9;
+      --surface:      #FFFFFF;
+      --surface-alt:  #F8FAFC;
+      --border:       #E2E8F0;
+      --text-primary: #0F172A;
+      --text-muted:   #64748B;
+      --text-light:   #94A3B8;
+
+      --header-bg:    #0F172A;
+      --header-text:  #E2E8F0;
+
+      /* Category accent colors — add new ones here for new categories */
+      --c-daily:  #EA580C;
+      --c-big:    #4F46E5;
+      --c-labor:  #0891B2;  /* ready for future use */
+
+      --radius-sm: 6px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+      --shadow-md: 0 4px 16px rgba(0,0,0,.08), 0 2px 4px rgba(0,0,0,.04);
+
+      --font: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    /* ── Hero header ────────────────────────────────────────────────────────── */
+    .hero {
+      background: var(--header-bg);
+      padding: 52px 48px 48px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 80% at 80% -20%, rgba(99,102,241,.25) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 60% at 20% 110%, rgba(234,88,12,.18) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .hero-inner {
+      max-width: 900px;
+      position: relative;
+      z-index: 1;
+    }
+    .hero-eyebrow {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: #64748B;
+      margin-bottom: 14px;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.25rem);
+      font-weight: 800;
+      color: #F8FAFC;
+      line-height: 1.1;
+      margin-bottom: 20px;
+      letter-spacing: -.02em;
+    }
+    .hero h1 span {
+      background: linear-gradient(90deg, #F97316, #FBBF24);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-desc {
+      font-size: 1.05rem;
+      line-height: 1.7;
+      color: #94A3B8;
+      max-width: 620px;
+      margin-bottom: 28px;
+    }
+    .hero-meta {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 100px;
+      padding: 4px 12px;
+      font-size: .78rem;
+      color: #94A3B8;
+    }
+    .hero-badge .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #22C55E;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .4; }
+    }
+
+    /* ── Category tabs ──────────────────────────────────────────────────────── */
+    .tabs-wrap {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .tabs {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 32px;
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab-btn {
+      flex-shrink: 0;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: .9rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      padding: 16px 20px 14px;
+      border-bottom: 3px solid transparent;
+      transition: color .2s, border-color .2s;
+      white-space: nowrap;
+    }
+    .tab-btn:hover { color: var(--text-primary); }
+    .tab-btn.active {
+      color: var(--text-primary);
+      font-weight: 600;
+      /* border-color set by JS using category accent */
+    }
+
+    /* ── Main layout ────────────────────────────────────────────────────────── */
+    .main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 32px 80px;
+    }
+
+    .category-header {
+      margin-bottom: 28px;
+    }
+    .category-title {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+    .category-subtitle {
+      font-size: .9rem;
+      color: var(--text-muted);
+    }
+
+    /* ── Chart grid ─────────────────────────────────────────────────────────── */
+    /* 2-column by default; 1 column on small screens.
+       JS injects items — adding more items fills the grid automatically. */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+      gap: 24px;
+    }
+    @media (max-width: 560px) {
+      .charts-grid { grid-template-columns: 1fr; }
+      .hero { padding: 36px 20px 32px; }
+      .main { padding: 28px 16px 60px; }
+      .tabs { padding: 0 16px; }
+    }
+
+    /* ── Chart card ─────────────────────────────────────────────────────────── */
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      padding: 24px 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      transition: box-shadow .2s;
+    }
+    .chart-card:hover { box-shadow: var(--shadow-md); }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .card-title-block { flex: 1; min-width: 0; }
+    .card-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card-subtitle {
+      font-size: .8rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .card-desc {
+      font-size: .78rem;
+      color: var(--text-light);
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+
+    .card-stat {
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .stat-value {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1;
+    }
+    .stat-unit {
+      font-size: .7rem;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+    .stat-change {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: .75rem;
+      font-weight: 600;
+      margin-top: 5px;
+      padding: 2px 7px;
+      border-radius: 100px;
+    }
+    .stat-change.up   { background: #FEF2F2; color: #DC2626; }
+    .stat-change.down { background: #F0FDF4; color: #16A34A; }
+    .stat-change.flat { background: #F8FAFC; color: #64748B; }
+
+    /* ── Range buttons ──────────────────────────────────────────────────────── */
+    .range-btns {
+      display: flex;
+      gap: 4px;
+    }
+    .range-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 4px 10px;
+      font-family: var(--font);
+      font-size: .72rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .range-btn:hover { border-color: #94A3B8; color: var(--text-primary); }
+    .range-btn.active {
+      color: var(--surface);
+      border-color: transparent;
+      /* background set by JS */
+    }
+
+    /* ── Canvas wrapper ─────────────────────────────────────────────────────── */
+    .chart-wrap {
+      position: relative;
+      height: 220px;
+    }
+    .chart-wrap canvas { display: block; }
+
+    /* ── Card footer ────────────────────────────────────────────────────────── */
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+    .card-source {
+      font-size: .7rem;
+      color: var(--text-light);
+    }
+    .card-dl-btn {
+      background: none;
+      border: none;
+      font-family: var(--font);
+      font-size: .72rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 0;
+      transition: color .15s;
+    }
+    .card-dl-btn:hover { color: var(--text-primary); }
+
+    /* ── Global download bar ────────────────────────────────────────────────── */
+    .dl-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 14px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 200;
+      box-shadow: 0 -4px 16px rgba(0,0,0,.06);
+    }
+    .dl-bar-label {
+      font-size: .85rem;
+      color: var(--text-muted);
+    }
+    .dl-bar-label strong { color: var(--text-primary); }
+    .dl-btn-main {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--text-primary);
+      color: var(--surface);
+      border: none;
+      border-radius: var(--radius-md);
+      padding: 10px 20px;
+      font-family: var(--font);
+      font-size: .85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .dl-btn-main:hover { opacity: .85; }
+
+    /* ── No-data state ──────────────────────────────────────────────────────── */
+    .no-data {
+      grid-column: 1 / -1;
+      padding: 60px 24px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+    .no-data h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: var(--text-primary);
+    }
+    .no-data code {
+      background: #F1F5F9;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-size: .85rem;
+      color: #334155;
+    }
+
+    /* ── Fade transition ────────────────────────────────────────────────────── */
+    .charts-grid { opacity: 1; transition: opacity .18s; }
+    .charts-grid.fading { opacity: 0; }
+
+    /* ── Scorecard ──────────────────────────────────────────────────────────── */
+    .scorecard-section {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 28px 0 32px;
+    }
+    .scorecard-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 32px;
+    }
+    .scorecard-heading {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .scorecard-heading h2 {
+      font-size: .95rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .scorecard-heading p {
+      font-size: .8rem;
+      color: var(--text-muted);
+    }
+    .scorecard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 12px;
+    }
+    .sc-card {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-top-width: 3px;
+      border-radius: var(--radius-md);
+      padding: 14px 16px 12px;
+      cursor: pointer;
+      transition: box-shadow .15s, transform .15s;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .sc-card:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
+    .sc-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .sc-name {
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: block;
+    }
+    .sc-subtitle {
+      font-size: .7rem;
+      color: var(--text-muted);
+      display: block;
+      margin-top: 2px;
+      line-height: 1.3;
+    }
+    .sc-spark { flex-shrink: 0; }
+    .sc-bottom {
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+      margin-top: 2px;
+    }
+    .sc-value {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .sc-change {
+      font-size: .7rem;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 100px;
+    }
+    .sc-change.up   { background: #FEF2F2; color: #DC2626; }
+    .sc-change.down { background: #F0FDF4; color: #16A34A; }
+    .sc-change.flat { background: #F8FAFC; color: #64748B; }
+    .sc-unit { font-size: .68rem; color: var(--text-light); }
+
+    @media (max-width: 560px) {
+      .scorecard-inner { padding: 0 16px; }
+      .scorecard-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Hero ─────────────────────────────────────────────────────────────────── -->
+<header class="hero">
+  <div class="hero-inner">
+    <p class="hero-eyebrow">Economic Dashboard</p>
+    <h1>Affordability <span>Tracker</span></h1>
+    <p class="hero-desc">
+      Prices don't feel abstract when you're at the pump or the checkout line.
+      This tracker cuts through the noise — pulling grocery prices, gas, car
+      insurance, and mortgage rates straight from federal data — so you can see
+      exactly what's changed, by how much, and over what span of time. No
+      subscriptions, no paywalls: just the numbers.
+    </p>
+    <div class="hero-meta">
+      <span class="hero-badge">
+        <span class="dot"></span>
+        Live FRED data
+      </span>
+      <span class="hero-badge" id="hero-updated">Last updated: —</span>
+    </div>
+  </div>
+</header>
+
+<!-- ── Scorecard ──────────────────────────────────────────────────────────────── -->
+<section class="scorecard-section">
+  <div class="scorecard-inner">
+    <div class="scorecard-heading">
+      <h2>At a Glance</h2>
+      <p>Latest readings across all tracked metrics — click any card to explore.</p>
+    </div>
+    <div class="scorecard-grid" id="scorecard-grid">
+      <!-- populated by JS -->
+    </div>
+  </div>
+</section>
+
+<!-- ── Category tabs ─────────────────────────────────────────────────────────── -->
+<div class="tabs-wrap">
+  <div class="tabs" id="tabs-container" role="tablist">
+    <!-- populated by JS -->
+  </div>
+</div>
+
+<!-- ── Dashboard ─────────────────────────────────────────────────────────────── -->
+<main class="main">
+  <div class="category-header">
+    <h2 class="category-title" id="cat-title"></h2>
+    <p class="category-subtitle" id="cat-subtitle"></p>
+  </div>
+  <div class="charts-grid" id="charts-grid">
+    <!-- chart cards injected by JS -->
+  </div>
+</main>
+
+<!-- ── Download bar ───────────────────────────────────────────────────────────── -->
+<div class="dl-bar">
+  <span class="dl-bar-label">
+    Data sourced from the <strong>Federal Reserve Economic Data (FRED)</strong>
+  </span>
+  <button class="dl-btn-main" id="dl-all-btn">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="7 10 12 15 17 10"/>
+      <line x1="12" y1="15" x2="12" y2="3"/>
+    </svg>
+    Download Data
+  </button>
+</div>
+
+<!-- ── Data (auto-generated by fetch_data.R) ─────────────────────────────────── -->
+<script src="data/app_data.js"></script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// CATEGORY CONFIGURATION
+// To add a new top-level category: add an entry here.
+// Items appear automatically if their `category` field matches.
+// ═══════════════════════════════════════════════════════════════════════════════
+const CATEGORIES = {
+  daily: {
+    label:    "Daily Items",
+    subtitle: "Costs you feel every week — groceries, gas, and other everyday expenses.",
+    accent:   "#EA580C",
+  },
+  big: {
+    label:    "Big Items",
+    subtitle: "Major household expenses that shape long-term budgets.",
+    accent:   "#4F46E5",
+  },
+  labor: {
+    label:    "Labor Market",
+    subtitle: "Employment, wages, and job market conditions — the income side of affordability.",
+    accent:   "#0891B2",
+    hidden:   true,   // set to false to activate the tab when ready
+  },
+  // ── Add future categories here ──────────────────────────────────────────────
+  // Copy the block below, fill in the fields, set hidden: false to show the tab.
+  //
+  // housing: {
+  //   label:   "Housing",
+  //   subtitle: "Home prices, rents, and related costs.",
+  //   accent:  "#10B981",
+  //   hidden:  false,
+  // },
+};
+
+// Preserve insertion order for tab display
+const CATEGORY_ORDER = Object.keys(CATEGORIES);
+
+// ── State ──────────────────────────────────────────────────────────────────────
+let activeCategory = CATEGORY_ORDER[0];
+let activeCharts   = {};   // id → Chart.js instance
+let activeRanges   = {};   // id → range string
+
+// ── Utility helpers ────────────────────────────────────────────────────────────
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function formatValue(val, units) {
+  if (units.includes("%")) return val.toFixed(2) + "%";
+  if (units.includes("$") || units.toLowerCase().includes("gallon")) return "$" + val.toFixed(2);
+  return val.toFixed(1);
+}
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr + "T12:00:00");
+  return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+function filterByRange(data, range) {
+  if (range === "Max") return data;
+  const years  = parseInt(range);
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - years);
+  return data.filter(d => new Date(d.date) >= cutoff);
+}
+
+function makeSpark(data, color, w = 108, h = 38) {
+  const recent = filterByRange(data, "2Y");
+  if (recent.length < 2) return "";
+  const vals  = recent.map(d => d.value);
+  const min   = Math.min(...vals);
+  const max   = Math.max(...vals);
+  const range = max - min || 1;
+  const pad   = 2;
+  const pts   = vals.map((v, i) => {
+    const x = (i / (vals.length - 1)) * w;
+    const y = h - pad - ((v - min) / range) * (h - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.8"
+      stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+  </svg>`;
+}
+
+function downloadCSV(rows, filename) {
+  const header = "date,value\n";
+  const body   = rows.map(r => `${r.date},${r.value}`).join("\n");
+  const blob   = new Blob([header + body], { type: "text/csv" });
+  const url    = URL.createObjectURL(blob);
+  const a      = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Scorecard ─────────────────────────────────────────────────────────────────
+function renderScorecard() {
+  const data = window.AFFORDABILITY_DATA;
+  const grid = document.getElementById("scorecard-grid");
+  if (!grid) return;
+
+  if (!data) {
+    grid.innerHTML = `<p style="font-size:.85rem;color:var(--text-muted)">
+      Run <code style="background:#F1F5F9;padding:1px 6px;border-radius:4px">Rscript fetch_data.R</code> to load data.</p>`;
+    return;
+  }
+
+  grid.innerHTML = "";
+
+  // All series in category order, excluding hidden categories
+  const items = CATEGORY_ORDER.flatMap(catId => {
+    if (CATEGORIES[catId] && CATEGORIES[catId].hidden) return [];
+    return Object.values(data).filter(d => d.category === catId);
+  });
+
+  items.forEach(item => {
+    const cat = CATEGORIES[item.category];
+    if (!cat) return;
+
+    const changeCls   = item.yoy_change > 0 ? "up" : item.yoy_change < 0 ? "down" : "flat";
+    const arrow       = item.yoy_change > 0 ? "↑" : item.yoy_change < 0 ? "↓" : "→";
+    const changeBadge = item.yoy_change != null
+      ? `<span class="sc-change ${changeCls}">${arrow} ${Math.abs(item.yoy_change).toFixed(1)}%</span>`
+      : "";
+
+    const card = document.createElement("div");
+    card.className = "sc-card";
+    card.style.borderTopColor = cat.accent;
+    card.title = `Go to ${cat.label}`;
+    card.innerHTML = `
+      <div class="sc-card-top">
+        <div>
+          <span class="sc-name">${item.label}</span>
+          <span class="sc-subtitle">${item.subtitle || ""}</span>
+        </div>
+        <div class="sc-spark">${makeSpark(item.data, item.color)}</div>
+      </div>
+      <div class="sc-bottom">
+        <span class="sc-value">${formatValue(item.latest_value, item.units)}</span>
+        ${changeBadge}
+      </div>
+      <div class="sc-unit">${item.units}</div>`;
+
+    card.addEventListener("click", () => {
+      const targetTab = document.querySelector(`.tab-btn[data-cat="${item.category}"]`);
+      if (targetTab) targetTab.click();
+      setTimeout(() => {
+        document.getElementById("charts-grid")
+          .scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 220);
+    });
+
+    grid.appendChild(card);
+  });
+}
+
+// ── No-data placeholder ────────────────────────────────────────────────────────
+function renderNoData(grid) {
+  grid.innerHTML = `
+    <div class="no-data">
+      <h3>No data loaded yet</h3>
+      <p style="margin-top:8px">
+        Run <code>Rscript fetch_data.R</code> in this folder to download data from FRED,
+        then refresh the page.
+      </p>
+    </div>`;
+}
+
+// ── Build a Chart.js chart ─────────────────────────────────────────────────────
+function buildChart(canvas, item, data, accent) {
+  const ctx      = canvas.getContext("2d");
+  const grad     = ctx.createLinearGradient(0, 0, 0, 220);
+  grad.addColorStop(0,   hexToRgba(item.color, 0.28));
+  grad.addColorStop(0.7, hexToRgba(item.color, 0.06));
+  grad.addColorStop(1,   hexToRgba(item.color, 0.0));
+
+  return new Chart(ctx, {
+    type: "line",
+    data: {
+      datasets: [{
+        label:                    item.label,
+        data:                     data.map(d => ({ x: d.date, y: d.value })),
+        borderColor:              item.color,
+        backgroundColor:          grad,
+        borderWidth:              2,
+        pointRadius:              0,
+        pointHoverRadius:         5,
+        pointHoverBackgroundColor: item.color,
+        pointHoverBorderColor:    "#fff",
+        pointHoverBorderWidth:    2,
+        tension:                  0.35,
+        fill:                     true,
+      }],
+    },
+    options: {
+      responsive:          true,
+      maintainAspectRatio: false,
+      animation:           { duration: 400, easing: "easeOutQuart" },
+      interaction:         { intersect: false, mode: "index" },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: "#0F172A",
+          titleColor:      "#94A3B8",
+          bodyColor:       "#F8FAFC",
+          borderColor:     "#1E293B",
+          borderWidth:     1,
+          padding:         12,
+          cornerRadius:    8,
+          titleFont:       { size: 11, family: "'Inter', sans-serif" },
+          bodyFont:        { size: 13, weight: "600", family: "'Inter', sans-serif" },
+          callbacks: {
+            title: ctx => formatDate(ctx[0].parsed.x),
+            label: ctx => {
+              const v = ctx.parsed.y;
+              return "  " + formatValue(v, item.units) + "  (" + item.units + ")";
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          type:   "time",
+          time:   { tooltipFormat: "yyyy-MM-dd", unit: "year" },
+          grid:   { display: false },
+          border: { display: false },
+          ticks:  {
+            color:      "#94A3B8",
+            font:       { size: 11, family: "'Inter', sans-serif" },
+            maxTicksLimit: 8,
+          },
+        },
+        y: {
+          position: "right",
+          grid:     { color: "#F1F5F9", lineWidth: 1 },
+          border:   { display: false, dash: [4, 4] },
+          ticks:    {
+            color:      "#94A3B8",
+            font:       { size: 11, family: "'Inter', sans-serif" },
+            maxTicksLimit: 5,
+            callback:   v => formatValue(v, item.units),
+          },
+        },
+      },
+    },
+  });
+}
+
+// ── Render a single chart card ─────────────────────────────────────────────────
+function renderCard(item, accent) {
+  const RANGES     = ["2Y", "5Y", "10Y", "Max"];
+  const defaultRange = "10Y";
+  activeRanges[item.id] = activeRanges[item.id] || defaultRange;
+
+  const card = document.createElement("div");
+  card.className = "chart-card";
+  card.id = "card-" + item.id;
+
+  // Change badge
+  let changeBadge = "";
+  if (item.yoy_change != null) {
+    const cls = item.yoy_change > 0 ? "up" : item.yoy_change < 0 ? "down" : "flat";
+    const arrow = item.yoy_change > 0 ? "↑" : item.yoy_change < 0 ? "↓" : "→";
+    changeBadge = `<span class="stat-change ${cls}">${arrow} ${Math.abs(item.yoy_change).toFixed(1)}% YoY</span>`;
+  }
+
+  // Range buttons HTML
+  const rangeBtns = RANGES.map(r => {
+    const active = r === activeRanges[item.id] ? "active" : "";
+    const bg     = active ? `style="background:${accent};border-color:${accent}"` : "";
+    return `<button class="range-btn ${active}" ${bg} data-id="${item.id}" data-range="${r}">${r}</button>`;
+  }).join("");
+
+  card.innerHTML = `
+    <div class="card-header">
+      <div class="card-title-block">
+        <div class="card-title">${item.label}</div>
+        <div class="card-subtitle">${item.subtitle || ""}</div>
+        <div class="card-desc">${item.description || ""}</div>
+      </div>
+      <div class="card-stat">
+        <div class="stat-value">${formatValue(item.latest_value, item.units)}</div>
+        <div class="stat-unit">${item.units}</div>
+        ${changeBadge}
+      </div>
+    </div>
+    <div class="range-btns" id="range-${item.id}">${rangeBtns}</div>
+    <div class="chart-wrap">
+      <canvas id="canvas-${item.id}"></canvas>
+    </div>
+    <div class="card-footer">
+      <span class="card-source">FRED · ${item.fred_id} · Updated ${item.latest_date}</span>
+      <button class="card-dl-btn" data-dl="${item.id}">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        CSV
+      </button>
+    </div>`;
+
+  return card;
+}
+
+// ── Draw / redraw a chart inside a card ────────────────────────────────────────
+function drawChart(item, accent) {
+  const canvas = document.getElementById("canvas-" + item.id);
+  if (!canvas) return;
+
+  // Destroy previous instance
+  if (activeCharts[item.id]) {
+    activeCharts[item.id].destroy();
+    delete activeCharts[item.id];
+  }
+
+  const range    = activeRanges[item.id] || "10Y";
+  const filtered = filterByRange(item.data, range);
+  activeCharts[item.id] = buildChart(canvas, item, filtered, accent);
+}
+
+// ── Render all cards for a category ──────────────────────────────────────────
+function renderCategory(categoryId) {
+  const cat    = CATEGORIES[categoryId];
+  const grid   = document.getElementById("charts-grid");
+  const data   = window.AFFORDABILITY_DATA;
+
+  // Update header
+  document.getElementById("cat-title").textContent    = cat.label;
+  document.getElementById("cat-subtitle").textContent = cat.subtitle;
+
+  if (!data) { renderNoData(grid); return; }
+
+  const items = Object.values(data).filter(d => d.category === categoryId);
+
+  grid.classList.add("fading");
+  setTimeout(() => {
+    // Destroy existing charts
+    Object.values(activeCharts).forEach(c => c.destroy());
+    activeCharts = {};
+
+    grid.innerHTML = "";
+
+    if (items.length === 0) {
+      grid.innerHTML = `<div class="no-data"><h3>No items in this category yet.</h3></div>`;
+      grid.classList.remove("fading");
+      return;
+    }
+
+    items.forEach(item => {
+      const card = renderCard(item, cat.accent);
+      grid.appendChild(card);
+    });
+
+    // Draw charts after DOM paint
+    requestAnimationFrame(() => {
+      items.forEach(item => drawChart(item, cat.accent));
+      grid.classList.remove("fading");
+    });
+  }, 180);
+}
+
+// ── Tab bar ────────────────────────────────────────────────────────────────────
+function buildTabs() {
+  const container = document.getElementById("tabs-container");
+  const data      = window.AFFORDABILITY_DATA || {};
+
+  CATEGORY_ORDER.forEach(catId => {
+    const cat   = CATEGORIES[catId];
+    if (cat.hidden) return;   // category marked hidden until ready
+    const count = Object.values(data).filter(d => d.category === catId).length;
+    if (count === 0) return;  // hide tab if no data
+
+    const btn = document.createElement("button");
+    btn.className    = "tab-btn" + (catId === activeCategory ? " active" : "");
+    btn.dataset.cat  = catId;
+    btn.textContent  = cat.label;
+    btn.setAttribute("role", "tab");
+    btn.setAttribute("aria-selected", catId === activeCategory);
+
+    if (catId === activeCategory) {
+      btn.style.borderBottomColor = cat.accent;
+      btn.style.color             = cat.accent;
+    }
+
+    btn.addEventListener("click", () => {
+      if (btn.dataset.cat === activeCategory) return;
+      activeCategory = btn.dataset.cat;
+
+      document.querySelectorAll(".tab-btn").forEach(b => {
+        b.classList.remove("active");
+        b.style.borderBottomColor = "transparent";
+        b.style.color             = "";
+        b.setAttribute("aria-selected", "false");
+      });
+      btn.classList.add("active");
+      btn.style.borderBottomColor = CATEGORIES[activeCategory].accent;
+      btn.style.color             = CATEGORIES[activeCategory].accent;
+      btn.setAttribute("aria-selected", "true");
+
+      renderCategory(activeCategory);
+    });
+
+    container.appendChild(btn);
+  });
+}
+
+// ── Range button clicks (delegated) ───────────────────────────────────────────
+document.getElementById("charts-grid").addEventListener("click", e => {
+  const btn = e.target.closest(".range-btn");
+  if (!btn) return;
+
+  const { id, range } = btn.dataset;
+  const accent = CATEGORIES[activeCategory].accent;
+
+  // Update UI
+  document.querySelectorAll(`#range-${id} .range-btn`).forEach(b => {
+    b.classList.remove("active");
+    b.style.background    = "";
+    b.style.borderColor   = "";
+    b.style.color         = "";
+  });
+  btn.classList.add("active");
+  btn.style.background  = accent;
+  btn.style.borderColor = accent;
+  btn.style.color       = "#fff";
+
+  activeRanges[id] = range;
+  const item = window.AFFORDABILITY_DATA[id];
+  if (item) drawChart(item, accent);
+});
+
+// ── Per-card CSV download (delegated) ─────────────────────────────────────────
+document.getElementById("charts-grid").addEventListener("click", e => {
+  const btn = e.target.closest("[data-dl]");
+  if (!btn) return;
+
+  const id   = btn.dataset.dl;
+  const item = window.AFFORDABILITY_DATA && window.AFFORDABILITY_DATA[id];
+  if (item) downloadCSV(item.data, id + ".csv");
+});
+
+// ── Global download: all data in current category ─────────────────────────────
+document.getElementById("dl-all-btn").addEventListener("click", () => {
+  const data = window.AFFORDABILITY_DATA;
+  if (!data) return;
+
+  const items = Object.values(data).filter(d => d.category === activeCategory);
+  if (items.length === 0) return;
+
+  // Combine into a single wide CSV
+  const allDates = [...new Set(items.flatMap(i => i.data.map(r => r.date)))].sort();
+  const header   = ["date", ...items.map(i => i.id)].join(",");
+  const rows     = allDates.map(date => {
+    const vals = items.map(i => {
+      const row = i.data.find(r => r.date === date);
+      return row ? row.value : "";
+    });
+    return [date, ...vals].join(",");
+  });
+
+  const csv      = [header, ...rows].join("\n");
+  const blob     = new Blob([csv], { type: "text/csv" });
+  const url      = URL.createObjectURL(blob);
+  const a        = document.createElement("a");
+  a.href         = url;
+  a.download     = `affordability_${activeCategory}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ── Boot ────────────────────────────────────────────────────────────────────────
+function init() {
+  const data = window.AFFORDABILITY_DATA;
+
+  // Update "last updated" badge
+  if (data) {
+    const dates = Object.values(data).map(d => d.last_updated).filter(Boolean).sort();
+    if (dates.length) {
+      document.getElementById("hero-updated").innerHTML =
+        `Last updated: ${formatDate(dates[dates.length - 1])}`;
+    }
+  }
+
+  renderScorecard();
+  buildTabs();
+  renderCategory(activeCategory);
+}
+
+// If the data script loaded, go. Otherwise wait for it (shouldn't happen but safe).
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
+</script>
+</body>
+</html>
