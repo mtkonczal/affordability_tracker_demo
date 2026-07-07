@@ -4,50 +4,92 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-A static, self-contained affordability tracker dashboard. `fetch_data.R` pulls FRED time series via the public CSV endpoint (no API key) and writes them into `data/`; `index.html` reads `data/app_data.js` and renders tabs of charts/scorecards using Chart.js loaded from a CDN. There is no build step, no server, and no JS package manager — open `index.html` directly in a browser.
-
-`affordability_tracker.html` (untracked) is a separate ESP-branded variant of the dashboard. The canonical app is `index.html`.
+A static, self-contained affordability tracker dashboard with national and
+state-level data. `fetch_data.R` pulls time series from FRED, the BLS API,
+Zillow, the Census API, and (optionally) EIA, and writes static JS payloads
+into `data/`; `index.html` renders three views (National / My State / Compare
+States) with React + Chart.js loaded from CDNs. There is no build step, no
+server, and no JS package manager. `about.html` is a static sources-and-methods
+page.
 
 ## Common commands
 
 ```bash
-# Refresh all data from FRED (writes data/*.csv, data/manifest.json, data/app_data.js)
+# Refresh all time-series data (national + 51 states; takes several minutes)
 Rscript fetch_data.R
 
-# View the dashboard
+# Rebuild the annual state indicators from raw sources (run yearly)
+python3 scripts/convert_annual.py
+
+# View the dashboard (or use the static server in .claude/launch.json)
 open index.html
 ```
 
-`fetch_data.R` only depends on `jsonlite` (auto-installs if missing) and base R `read.csv` against `https://fred.stlouisfed.org/graph/fredgraph.csv?id=...`. No FRED/BLS/BEA API keys are used here despite the global CLAUDE.md mentioning them.
+Keys read from `.Renviron` / environment: `BLS_KEY` (required — SA CPI
+subindexes not on FRED), `CENSUS_API_KEY` (required — county renter weights
+for state rents), `EIA_KEY` (optional — state electricity bills; skipped
+loudly when absent).
 
 ## Architecture
 
 ### Data flow
 
-1. `SERIES` list in `fetch_data.R` declares each indicator: `id`, `fred_id`, `label`, `subtitle`, `category`, `units`, `description`, `color`, `from`.
-2. For each series, the script downloads the FRED CSV, writes `data/<id>.csv` (used by the in-page Download button), computes `yoy_change` via `yoy_pct()` (latest value vs. value ≤365 days prior), and accumulates a metadata + data record.
-3. Two outputs are written:
-   - `data/manifest.json` — metadata only, no data arrays. Lightweight inspection.
-   - `data/app_data.js` — assigns the full payload to `window.AFFORDABILITY_DATA` for the HTML to consume via `<script src="data/app_data.js">`.
+1. `SERIES` in `fetch_data.R` declares national indicators; `STATES` (50 + DC,
+   with FIPS codes) × `STATE_METRICS` declares the state system. State FRED
+   IDs are generated from patterns (`{ST}UR`, `{ST}STHPI`,
+   `MEHOINUS{ST}A672N`, `SMU{fips}000000500000003`).
+2. State rents: Zillow county ZORI aggregated with ACS renter-household
+   weights (Census API); states under 50% renter coverage are omitted.
+3. Annual layers: `data/annual/annual_meta.json` lists yearly indicators
+   (KFF, CCAoA, NY Fed, Urban); their `state,value` CSVs are attached to
+   state payloads. Raw sources live in `data/annual/raw/`; see
+   `data/annual/README.md`.
+4. Outputs, all committed artifacts (re-run the script, don't hand-edit):
+   - `data/app_data.js` — national series → `window.AFFORDABILITY_DATA`
+   - `data/states_index.js` — state/metric catalog → `window.AFFORDABILITY_STATES`
+   - `data/states/{st}.js` — one state, all metrics → `window.STATE_DATA[code]`
+     (lazy-loaded by the My State view)
+   - `data/state_metrics/{id}.js` — one metric, all states →
+     `window.STATE_METRIC[id]` (lazy-loaded by the Compare view)
+   - `data/{id}.csv`, `data/state_{id}.csv`, `data/manifest.json`
+5. If anything fails to fetch, the script exits non-zero after trying
+   everything, so the GitHub Action skips its commit and the deployed site
+   keeps serving the last good data. EIA skipped for a missing key is not a
+   failure.
 
-### Front-end
+### Front-end (`index.html`, single file, React via Babel-standalone)
 
-`index.html` is a single self-contained file (~1100 lines: CSS, markup, JS). Two configuration sources drive everything:
+- Three views in `AppMain`: `NationalView` (additive category/chip selection,
+  chart cards, YoY heatmap), `StateView` (all metrics for one state, each
+  with a dashed US-average overlay, plus annual stat tiles), `CompareView`
+  (one metric, US + pinned states overlay chart + all-states sparkline grid).
+- Global controls: anchor ("Measure from": 1Y / Since Jan 2025 /
+  Pre-Pandemic (Dec 2019) / Since 2000 / Max) and a $-levels vs %-change
+  toggle. Cards can override the anchor locally.
+- Every card shows dual badges (change since Jan 2025 and since Dec 2019),
+  and has Copy-fact / CSV / PNG buttons.
+- Deep links via the URL hash: `#view=state&state=IL&anchor=2025`.
+- Index-unit series (`rebase: true`) always display as cumulative % change,
+  never raw index points. The pre-pandemic anchor is Dec 2019 (not 2020 —
+  avoids COVID base effects). Don't change these without flagging it.
 
-- **`SERIES` in `fetch_data.R`** — what data exists and how each series is labeled/colored.
-- **`CATEGORIES` object in `index.html`** (around line 577) — the tab grouping. Each entry has `label`, `subtitle`, `accent`, optional `hidden: true` to suppress an unfinished tab. `CATEGORY_ORDER` is `Object.keys(CATEGORIES)` and controls tab/scorecard ordering.
+### Adding indicators
 
-A series's `category` field in `SERIES` must match a key in `CATEGORIES`. Tabs hide automatically if `hidden: true` or if no series reference them. The `labor` category is currently hidden; flip `hidden: false` to activate it.
-
-### Adding a new indicator
-
-1. Append an entry to `SERIES` in `fetch_data.R` with a new `id`, the FRED series identifier, and a `category` matching an existing or new `CATEGORIES` key.
-2. If introducing a new category, add it to `CATEGORIES` in `index.html` (and optionally a `--c-<name>` CSS accent variable around line 38).
-3. Run `Rscript fetch_data.R`. No HTML edits are needed for new series within an existing category.
+- **National series:** append to `SERIES` in `fetch_data.R`, run the script.
+  Colors are family-coordinated by category (daily = teal, groceries = amber,
+  big = indigo/violet, labor = green, debt = red).
+- **State metric:** append to `STATE_METRICS` (a FRED ID pattern or a custom
+  source), run the script. The front end picks it up from `states_index.js`.
+- **Annual indicator:** drop a `state,value` CSV in `data/annual/`, describe
+  it in `annual_meta.json`, run the script.
 
 ### Notes for editing
 
-- The HTML is hand-written and self-contained; do not introduce a bundler or framework unless asked.
-- Chart.js is pinned to `4.4.0` via jsDelivr; the date adapter is `chartjs-adapter-date-fns@3.0.0`. Both load from CDN.
-- `data/app_data.js` and `data/*.csv` are committed regenerated artifacts — re-run the R script rather than hand-editing.
-- The hidden `labor` category already has three series (`unemployment`, `hourly_earnings`, `job_openings`) wired up in `SERIES` and ready to display.
+- The HTML is hand-written and self-contained; do not introduce a bundler or
+  framework unless asked.
+- Chart.js is pinned to `4.4.0` via jsDelivr; the date adapter is
+  `chartjs-adapter-date-fns@3.0.0`. React 18.3.1 dev builds + Babel standalone
+  come from unpkg (known perf trade-off, deliberate for now).
+- No state CPI exists. Never add or imply state-level price indexes; the
+  About page and state view say this explicitly.
+- `backup_index.html` is an old design iteration kept for reference.

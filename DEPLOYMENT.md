@@ -7,11 +7,17 @@ pieces fit together.
 
 ## One-time setup (GitHub UI — requires repo admin)
 
-1. **Add the `BLS_KEY` secret.** Settings → Secrets and variables → Actions →
-   New repository secret → name `BLS_KEY`, value your BLS API key. Several
-   series (car insurance, health insurance, childcare, and the meat/dairy/
-   produce items) come from the BLS API rather than FRED's public CSV
-   endpoint and need this key to fetch.
+1. **Add the API-key secrets.** Settings → Secrets and variables → Actions →
+   New repository secret:
+   - `BLS_KEY` (required) — several series (car insurance, health insurance,
+     childcare, and the meat/dairy/produce items) come from the BLS API
+     rather than FRED's public CSV endpoint.
+   - `CENSUS_API_KEY` (required) — county renter-household weights for the
+     state rent aggregation. Free signup:
+     https://api.census.gov/data/key_signup.html
+   - `EIA_KEY` (optional) — enables the state electricity-bill metric. Free
+     signup: https://www.eia.gov/opendata/. Without it the script skips that
+     metric with a loud message and everything else still refreshes.
 2. **Enable GitHub Pages.** Settings → Pages → Source: "Deploy from a
    branch" → Branch: `main` / root. (If you'd rather not serve the raw repo
    root, this can be pointed at a dedicated branch instead — ask if you want
@@ -26,8 +32,9 @@ pieces fit together.
 ## What runs automatically
 
 `.github/workflows/update-data.yml`:
-- Runs on the 2nd and 16th of each month (a day or two after most CPI
-  releases), and on-demand via the "Run workflow" button in the Actions tab.
+- Runs on the 1st of each month, and on-demand via the "Run workflow"
+  button in the Actions tab. (CPI releases mid-month; add a second cron
+  date if you want the new print picked up within a day or two.)
 - Installs R, runs `Rscript fetch_data.R`, and commits `data/` if anything
   changed.
 - Permissions are `contents: write` only — nothing else in the repo or
