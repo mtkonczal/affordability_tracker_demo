@@ -33,10 +33,10 @@
       "overlay_only": false,
       "rebase": false,
       "last_updated": "2026-07-07",
-      "latest_value": 3.7,
-      "latest_date": "2026-06-29",
-      "yoy_change": 19.28,
-      "n_obs": 1383
+      "latest_value": 3.645,
+      "latest_date": "2026-07-06",
+      "yoy_change": 19.63,
+      "n_obs": 1384
     },
     "electricity": {
       "id": "electricity",
