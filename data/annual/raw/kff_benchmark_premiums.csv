@@ -1,0 +1,677 @@
+year,location,average_benchmark_premium
+2026,United States,625
+2026,Alabama,645
+2026,Alaska,1032
+2026,Arizona,532
+2026,Arkansas,774
+2026,California,570
+2026,Colorado,557
+2026,Connecticut,870
+2026,Delaware,691
+2026,District of Columbia,610
+2026,Florida,683
+2026,Georgia,615
+2026,Hawaii,541
+2026,Idaho,490
+2026,Illinois,646
+2026,Indiana,474
+2026,Iowa,501
+2026,Kansas,670
+2026,Kentucky,590
+2026,Louisiana,646
+2026,Maine,709
+2026,Maryland,414
+2026,Massachusetts,494
+2026,Michigan,523
+2026,Minnesota,448
+2026,Mississippi,662
+2026,Missouri,605
+2026,Montana,692
+2026,Nebraska,710
+2026,Nevada,497
+2026,New Hampshire,401
+2026,New Jersey,545
+2026,New Mexico,623
+2026,New York,817
+2026,North Carolina,638
+2026,North Dakota,570
+2026,Ohio,513
+2026,Oklahoma,604
+2026,Oregon,543
+2026,Pennsylvania,572
+2026,Rhode Island,506
+2026,South Carolina,564
+2026,South Dakota,655
+2026,Tennessee,711
+2026,Texas,661
+2026,Utah,640
+2026,Vermont,1299
+2026,Virginia,455
+2026,Washington,612
+2026,West Virginia,1073
+2026,Wisconsin,611
+2026,Wyoming,1090
+2025,United States,497
+2025,Alabama,535
+2025,Alaska,1045
+2025,Arizona,410
+2025,Arkansas,458
+2025,California,512
+2025,Colorado,463
+2025,Connecticut,693
+2025,Delaware,534
+2025,District of Columbia,578
+2025,Florida,515
+2025,Georgia,493
+2025,Hawaii,493
+2025,Idaho,436
+2025,Illinois,474
+2025,Indiana,382
+2025,Iowa,429
+2025,Kansas,513
+2025,Kentucky,442
+2025,Louisiana,524
+2025,Maine,546
+2025,Maryland,365
+2025,Massachusetts,447
+2025,Michigan,404
+2025,Minnesota,363
+2025,Mississippi,485
+2025,Missouri,489
+2025,Montana,554
+2025,Nebraska,600
+2025,Nevada,414
+2025,New Hampshire,325
+2025,New Jersey,492
+2025,New Mexico,515
+2025,New York,790
+2025,North Carolina,507
+2025,North Dakota,537
+2025,Ohio,441
+2025,Oklahoma,501
+2025,Oregon,510
+2025,Pennsylvania,461
+2025,Rhode Island,425
+2025,South Carolina,471
+2025,South Dakota,619
+2025,Tennessee,516
+2025,Texas,489
+2025,Utah,547
+2025,Vermont,1277
+2025,Virginia,372
+2025,Washington,434
+2025,West Virginia,919
+2025,Wisconsin,495
+2025,Wyoming,871
+2024,United States,477
+2024,Alabama,564
+2024,Alaska,889
+2024,Arizona,403
+2024,Arkansas,424
+2024,California,468
+2024,Colorado,451
+2024,Connecticut,661
+2024,Delaware,533
+2024,District of Columbia,532
+2024,Florida,489
+2024,Georgia,463
+2024,Hawaii,468
+2024,Idaho,417
+2024,Illinois,473
+2024,Indiana,399
+2024,Iowa,451
+2024,Kansas,486
+2024,Kentucky,431
+2024,Louisiana,563
+2024,Maine,515
+2024,Maryland,346
+2024,Massachusetts,419
+2024,Michigan,381
+2024,Minnesota,343
+2024,Mississippi,485
+2024,Missouri,501
+2024,Montana,504
+2024,Nebraska,570
+2024,Nevada,387
+2024,New Hampshire,335
+2024,New Jersey,461
+2024,New Mexico,471
+2024,New York,736
+2024,North Carolina,495
+2024,North Dakota,486
+2024,Ohio,435
+2024,Oklahoma,508
+2024,Oregon,488
+2024,Pennsylvania,445
+2024,Rhode Island,400
+2024,South Carolina,492
+2024,South Dakota,616
+2024,Tennessee,501
+2024,Texas,475
+2024,Utah,507
+2024,Vermont,950
+2024,Virginia,371
+2024,Washington,415
+2024,West Virginia,847
+2024,Wisconsin,476
+2024,Wyoming,821
+2023,United States,456
+2023,Alabama,567
+2023,Alaska,762
+2023,Arizona,410
+2023,Arkansas,416
+2023,California,432
+2023,Colorado,380
+2023,Connecticut,627
+2023,Delaware,549
+2023,District of Columbia,428
+2023,Florida,471
+2023,Georgia,413
+2023,Hawaii,469
+2023,Idaho,425
+2023,Illinois,453
+2023,Indiana,397
+2023,Iowa,484
+2023,Kansas,471
+2023,Kentucky,422
+2023,Louisiana,565
+2023,Maine,457
+2023,Maryland,336
+2023,Massachusetts,417
+2023,Michigan,362
+2023,Minnesota,335
+2023,Mississippi,461
+2023,Missouri,473
+2023,Montana,477
+2023,Nebraska,550
+2023,Nevada,386
+2023,New Hampshire,323
+2023,New Jersey,441
+2023,New Mexico,445
+2023,New York,627
+2023,North Carolina,512
+2023,North Dakota,475
+2023,Ohio,413
+2023,Oklahoma,510
+2023,Oregon,462
+2023,Pennsylvania,433
+2023,Rhode Island,379
+2023,South Carolina,496
+2023,South Dakota,626
+2023,Tennessee,473
+2023,Texas,461
+2023,Utah,471
+2023,Vermont,841
+2023,Virginia,371
+2023,Washington,395
+2023,West Virginia,824
+2023,Wisconsin,456
+2023,Wyoming,802
+2022,United States,438
+2022,Alabama,597
+2022,Alaska,712
+2022,Arizona,390
+2022,Arkansas,387
+2022,California,417
+2022,Colorado,358
+2022,Connecticut,581
+2022,Delaware,548
+2022,District of Columbia,387
+2022,Florida,456
+2022,Georgia,394
+2022,Hawaii,484
+2022,Idaho,461
+2022,Illinois,418
+2022,Indiana,398
+2022,Iowa,502
+2022,Kansas,450
+2022,Kentucky,387
+2022,Louisiana,541
+2022,Maine,427
+2022,Maryland,328
+2022,Massachusetts,389
+2022,Michigan,340
+2022,Minnesota,327
+2022,Mississippi,448
+2022,Missouri,442
+2022,Montana,483
+2022,Nebraska,595
+2022,Nevada,383
+2022,New Hampshire,309
+2022,New Jersey,424
+2022,New Mexico,389
+2022,New York,592
+2022,North Carolina,504
+2022,North Dakota,497
+2022,Ohio,375
+2022,Oklahoma,498
+2022,Oregon,444
+2022,Pennsylvania,390
+2022,Rhode Island,361
+2022,South Carolina,444
+2022,South Dakota,601
+2022,Tennessee,445
+2022,Texas,424
+2022,Utah,456
+2022,Vermont,749
+2022,Virginia,450
+2022,Washington,396
+2022,West Virginia,752
+2022,Wisconsin,429
+2022,Wyoming,762
+2021,United States,452
+2021,Alabama,590
+2021,Alaska,675
+2021,Arizona,436
+2021,Arkansas,394
+2021,California,426
+2021,Colorado,351
+2021,Connecticut,580
+2021,Delaware,540
+2021,District of Columbia,415
+2021,Florida,457
+2021,Georgia,456
+2021,Hawaii,478
+2021,Idaho,495
+2021,Illinois,423
+2021,Indiana,421
+2021,Iowa,523
+2021,Kansas,491
+2021,Kentucky,476
+2021,Louisiana,545
+2021,Maine,440
+2021,Maryland,347
+2021,Massachusetts,363
+2021,Michigan,347
+2021,Minnesota,307
+2021,Mississippi,459
+2021,Missouri,479
+2021,Montana,471
+2021,Nebraska,699
+2021,Nevada,393
+2021,New Hampshire,357
+2021,New Jersey,405
+2021,New Mexico,339
+2021,New York,597
+2021,North Carolina,516
+2021,North Dakota,493
+2021,Ohio,375
+2021,Oklahoma,554
+2021,Oregon,437
+2021,Pennsylvania,455
+2021,Rhode Island,349
+2021,South Carolina,476
+2021,South Dakota,618
+2021,Tennessee,466
+2021,Texas,436
+2021,Utah,472
+2021,Vermont,669
+2021,Virginia,479
+2021,Washington,388
+2021,West Virginia,654
+2021,Wisconsin,457
+2021,Wyoming,791
+2020,United States,462
+2020,Alabama,553
+2020,Alaska,724
+2020,Arizona,442
+2020,Arkansas,365
+2020,California,430
+2020,Colorado,358
+2020,Connecticut,570
+2020,Delaware,548
+2020,District of Columbia,414
+2020,Florida,468
+2020,Georgia,463
+2020,Hawaii,474
+2020,Idaho,520
+2020,Illinois,451
+2020,Indiana,387
+2020,Iowa,742
+2020,Kansas,502
+2020,Kentucky,471
+2020,Louisiana,500
+2020,Maine,513
+2020,Maryland,397
+2020,Massachusetts,343
+2020,Michigan,360
+2020,Minnesota,309
+2020,Mississippi,487
+2020,Missouri,483
+2020,Montana,483
+2020,Nebraska,711
+2020,Nevada,374
+2020,New Hampshire,405
+2020,New Jersey,392
+2020,New Mexico,345
+2020,New York,610
+2020,North Carolina,558
+2020,North Dakota,383
+2020,Ohio,375
+2020,Oklahoma,601
+2020,Oregon,446
+2020,Pennsylvania,459
+2020,Rhode Island,332
+2020,South Carolina,509
+2020,South Dakota,593
+2020,Tennessee,511
+2020,Texas,432
+2020,Utah,486
+2020,Vermont,662
+2020,Virginia,521
+2020,Washington,391
+2020,West Virginia,628
+2020,Wisconsin,491
+2020,Wyoming,881
+2019,United States,478
+2019,Alabama,546
+2019,Alaska,702
+2019,Arizona,471
+2019,Arkansas,378
+2019,California,439
+2019,Colorado,488
+2019,Connecticut,475
+2019,Delaware,684
+2019,District of Columbia,393
+2019,Florida,477
+2019,Georgia,487
+2019,Hawaii,493
+2019,Idaho,498
+2019,Illinois,478
+2019,Indiana,339
+2019,Iowa,762
+2019,Kansas,552
+2019,Kentucky,460
+2019,Louisiana,454
+2019,Maine,544
+2019,Maryland,419
+2019,Massachusetts,332
+2019,Michigan,383
+2019,Minnesota,326
+2019,Mississippi,521
+2019,Missouri,499
+2019,Montana,561
+2019,Nebraska,838
+2019,Nevada,410
+2019,New Hampshire,402
+2019,New Jersey,352
+2019,New Mexico,365
+2019,New York,569
+2019,North Carolina,618
+2019,North Dakota,457
+2019,Ohio,380
+2019,Oklahoma,696
+2019,Oregon,443
+2019,Pennsylvania,484
+2019,Rhode Island,336
+2019,South Carolina,552
+2019,South Dakota,557
+2019,Tennessee,548
+2019,Texas,444
+2019,Utah,542
+2019,Vermont,622
+2019,Virginia,555
+2019,Washington,406
+2019,West Virginia,596
+2019,Wisconsin,537
+2019,Wyoming,865
+2018,United States,481
+2018,Alabama,558
+2018,Alaska,726
+2018,Arizona,516
+2018,Arkansas,364
+2018,California,430
+2018,Colorado,470
+2018,Connecticut,545
+2018,Delaware,589
+2018,District of Columbia,324
+2018,Florida,466
+2018,Georgia,483
+2018,Hawaii,438
+2018,Idaho,478
+2018,Illinois,486
+2018,Indiana,339
+2018,Iowa,713
+2018,Kansas,518
+2018,Kentucky,422
+2018,Louisiana,474
+2018,Maine,588
+2018,Maryland,487
+2018,Massachusetts,316
+2018,Michigan,381
+2018,Minnesota,385
+2018,Mississippi,519
+2018,Missouri,529
+2018,Montana,525
+2018,Nebraska,767
+2018,Nevada,432
+2018,New Hampshire,475
+2018,New Jersey,413
+2018,New Mexico,414
+2018,New York,506
+2018,North Carolina,627
+2018,North Dakota,377
+2018,Ohio,371
+2018,Oklahoma,659
+2018,Oregon,414
+2018,Pennsylvania,575
+2018,Rhode Island,311
+2018,South Carolina,520
+2018,South Dakota,521
+2018,Tennessee,743
+2018,Texas,434
+2018,Utah,550
+2018,Vermont,505
+2018,Virginia,535
+2018,Washington,336
+2018,West Virginia,545
+2018,Wisconsin,569
+2018,Wyoming,865
+2017,United States,359
+2017,Alabama,469
+2017,Alaska,926
+2017,Arizona,515
+2017,Arkansas,281
+2017,California,341
+2017,Colorado,352
+2017,Connecticut,414
+2017,Delaware,423
+2017,District of Columbia,298
+2017,Florida,331
+2017,Georgia,336
+2017,Hawaii,330
+2017,Idaho,355
+2017,Illinois,352
+2017,Indiana,278
+2017,Iowa,379
+2017,Kansas,376
+2017,Kentucky,289
+2017,Louisiana,413
+2017,Maine,385
+2017,Maryland,318
+2017,Massachusetts,250
+2017,Michigan,278
+2017,Minnesota,412
+2017,Mississippi,329
+2017,Missouri,372
+2017,Montana,465
+2017,Nebraska,507
+2017,Nevada,302
+2017,New Hampshire,267
+2017,New Jersey,348
+2017,New Mexico,273
+2017,New York,454
+2017,North Carolina,543
+2017,North Dakota,352
+2017,Ohio,274
+2017,Oklahoma,518
+2017,Oregon,348
+2017,Pennsylvania,396
+2017,Rhode Island,261
+2017,South Carolina,386
+2017,South Dakota,456
+2017,Tennessee,472
+2017,Texas,320
+2017,Utah,309
+2017,Vermont,492
+2017,Virginia,322
+2017,Washington,243
+2017,West Virginia,472
+2017,Wisconsin,368
+2017,Wyoming,504
+2016,United States,299
+2016,Alabama,297
+2016,Alaska,719
+2016,Arizona,239
+2016,Arkansas,298
+2016,California,312
+2016,Colorado,307
+2016,Connecticut,353
+2016,Delaware,356
+2016,District of Columbia,244
+2016,Florida,287
+2016,Georgia,287
+2016,Hawaii,262
+2016,Idaho,284
+2016,Illinois,255
+2016,Indiana,282
+2016,Iowa,300
+2016,Kansas,264
+2016,Kentucky,261
+2016,Louisiana,353
+2016,Maine,335
+2016,Maryland,254
+2016,Massachusetts,257
+2016,Michigan,260
+2016,Minnesota,260
+2016,Mississippi,279
+2016,Missouri,314
+2016,Montana,322
+2016,Nebraska,332
+2016,Nevada,286
+2016,New Hampshire,262
+2016,New Jersey,332
+2016,New Mexico,212
+2016,New York,393
+2016,North Carolina,389
+2016,North Dakota,330
+2016,Ohio,268
+2016,Oklahoma,306
+2016,Oregon,274
+2016,Pennsylvania,260
+2016,Rhode Island,263
+2016,South Carolina,301
+2016,South Dakota,329
+2016,Tennessee,287
+2016,Texas,269
+2016,Utah,260
+2016,Vermont,468
+2016,Virginia,292
+2016,Washington,247
+2016,West Virginia,359
+2016,Wisconsin,319
+2016,Wyoming,463
+2015,United States,276
+2015,Alabama,264
+2015,Alaska,488
+2015,Arizona,196
+2015,Arkansas,285
+2015,California,312
+2015,Colorado,308
+2015,Connecticut,353
+2015,Delaware,301
+2015,District of Columbia,244
+2015,Florida,282
+2015,Georgia,271
+2015,Hawaii,262
+2015,Idaho,281
+2015,Illinois,234
+2015,Indiana,323
+2015,Iowa,265
+2015,Kansas,228
+2015,Kentucky,266
+2015,Louisiana,325
+2015,Maine,321
+2015,Maryland,255
+2015,Massachusetts,261
+2015,Michigan,255
+2015,Minnesota,259
+2015,Mississippi,304
+2015,Missouri,284
+2015,Montana,239
+2015,Nebraska,296
+2015,Nevada,265
+2015,New Hampshire,250
+2015,New Jersey,316
+2015,New Mexico,198
+2015,New York,380
+2015,North Carolina,316
+2015,North Dakota,303
+2015,Ohio,269
+2015,Oklahoma,226
+2015,Oregon,223
+2015,Pennsylvania,235
+2015,Rhode Island,263
+2015,South Carolina,271
+2015,South Dakota,264
+2015,Tennessee,233
+2015,Texas,256
+2015,Utah,225
+2015,Vermont,468
+2015,Virginia,281
+2015,Washington,234
+2015,West Virginia,289
+2015,Wisconsin,306
+2015,Wyoming,438
+2014,United States,273
+2014,Alabama,256
+2014,Alaska,426
+2014,Arizona,202
+2014,Arkansas,294
+2014,California,300
+2014,Colorado,275
+2014,Connecticut,361
+2014,Delaware,289
+2014,District of Columbia,242
+2014,Florida,266
+2014,Georgia,291
+2014,Hawaii,183
+2014,Idaho,235
+2014,Illinois,227
+2014,Indiana,328
+2014,Iowa,253
+2014,Kansas,239
+2014,Kentucky,247
+2014,Louisiana,308
+2014,Maine,325
+2014,Maryland,220
+2014,Massachusetts,268
+2014,Michigan,254
+2014,Minnesota,182
+2014,Mississippi,378
+2014,Missouri,287
+2014,Montana,253
+2014,Nebraska,249
+2014,Nevada,267
+2014,New Hampshire,289
+2014,New Jersey,323
+2014,New Mexico,226
+2014,New York,343
+2014,North Carolina,298
+2014,North Dakota,284
+2014,Ohio,264
+2014,Oklahoma,213
+2014,Oregon,217
+2014,Pennsylvania,239
+2014,Rhode Island,293
+2014,South Carolina,271
+2014,South Dakota,286
+2014,Tennessee,197
+2014,Texas,248
+2014,Utah,220
+2014,Vermont,413
+2014,Virginia,272
+2014,Washington,285
+2014,West Virginia,281
+2014,Wisconsin,298
+2014,Wyoming,419

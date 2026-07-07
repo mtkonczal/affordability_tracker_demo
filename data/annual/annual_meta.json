@@ -1,0 +1,56 @@
+[
+  {
+    "id": "aca_benchmark",
+    "label": "ACA Benchmark Premium",
+    "units": "$ per month, 40-year-old",
+    "year": "Plan year 2026",
+    "source": "KFF",
+    "source_url": "https://www.kff.org/affordable-care-act/state-indicator/marketplace-average-benchmark-premiums/",
+    "file": "aca_benchmark.csv"
+  },
+  {
+    "id": "childcare_infant",
+    "label": "Infant Child Care, Center-Based",
+    "units": "$ per year",
+    "year": "2025",
+    "source": "Child Care Aware of America",
+    "source_url": "https://info.childcareaware.org/price-and-supply-2025",
+    "file": "childcare_infant.csv"
+  },
+  {
+    "id": "nyfed_total_debt",
+    "label": "Household Debt per Capita",
+    "units": "$ per person with a credit file",
+    "year": "Q4 2025",
+    "source": "NY Fed Consumer Credit Panel / Equifax",
+    "source_url": "https://www.newyorkfed.org/microeconomics/databank.html",
+    "file": "nyfed_total_debt.csv"
+  },
+  {
+    "id": "nyfed_cc_delinquency",
+    "label": "Credit Card Delinquency, 90+ Days",
+    "units": "% of balance",
+    "year": "Q4 2025",
+    "source": "NY Fed Consumer Credit Panel / Equifax",
+    "source_url": "https://www.newyorkfed.org/microeconomics/databank.html",
+    "file": "nyfed_cc_delinquency.csv"
+  },
+  {
+    "id": "medical_debt",
+    "label": "Medical Debt in Collections",
+    "units": "% of people with a credit record",
+    "year": "Aug 2025",
+    "source": "Urban Institute, Debt in America",
+    "source_url": "https://apps.urban.org/features/debt-interactive-map/",
+    "file": "medical_debt.csv"
+  },
+  {
+    "id": "debt_collections",
+    "label": "Any Debt in Collections",
+    "units": "% of people with a credit record",
+    "year": "Aug 2025",
+    "source": "Urban Institute, Debt in America",
+    "source_url": "https://apps.urban.org/features/debt-interactive-map/",
+    "file": "debt_collections.csv"
+  }
+]
