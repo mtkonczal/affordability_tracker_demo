@@ -35,7 +35,8 @@
     .at-card { border-right: none !important; }
     .at-range-row { flex-wrap: wrap !important; }
     .at-heatmap-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .at-heatmap-scroll > div { min-width: 720px; }
+    .at-heatmap-scroll > div { min-width: 860px; }
+    .at-controls { flex-wrap: wrap !important; }
   }
   @media (max-width: 640px) {
     .at-pad { padding-left: 16px !important; padding-right: 16px !important; }
@@ -56,26 +57,26 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
 <script src="data/app_data.js"></script>
+<script src="data/states_index.js"></script>
 
 <script type="text/babel" data-presets="react">
 (function() {
-// Shared utilities and constants for all 3 variations
+// ── Shared utilities ─────────────────────────────────────────────────────────
 const ESP = {
-  warmNavy:  '#1B2A4E',   // Anchor — reads as ESP brand navy
-  warmRed:   '#E04E39',   // ESPA accent
-  beige:     '#F4ECD8',   // Off-white background
+  warmNavy:  '#1B2A4E',
+  warmRed:   '#E04E39',
+  beige:     '#F4ECD8',
   ink:       '#0E1320',
   paper:     '#FBF7EE',
-  rule:      '#1B2A4E',
   mute:      '#6B6E78',
   softMute:  '#9A9CA3',
   green:     '#2E7D5B',
-  amber:     '#C58A2E',
 };
 
-// Format helpers — match existing dashboard
+// Format helpers. Percents get one decimal place (comms request: easier to
+// read on charts); dollars keep cents only when small.
 function fmtVal(val, units = '') {
-  if (units.includes('%')) return val.toFixed(2) + '%';
+  if (units.includes('%')) return val.toFixed(1) + '%';
   if (units.includes('Billions')) return '$' + val.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + 'B';
   if (units.includes('$') || units.toLowerCase().includes('gallon') || units.toLowerCase().includes('hour')) {
     return Math.abs(val) >= 1000
@@ -84,6 +85,26 @@ function fmtVal(val, units = '') {
   }
   if (units.includes('Thousands')) return Math.round(val).toLocaleString();
   return val.toFixed(1);
+}
+
+// The three message anchors plus a short and a long window. "Pre-pandemic"
+// is December 2019, not early 2020 — anchoring at 2020 bakes the COVID
+// crash into the baseline (gas cratered in April 2020) and produces
+// comparisons that don't survive scrutiny.
+const ANCHORS = [
+  { id: '1y',   label: '1 Year',         phrase: 'over the past year' },
+  { id: '2025', label: 'Since Jan 2025', phrase: 'since Jan 2025' },
+  { id: '2019', label: 'Pre-Pandemic',   phrase: 'since Dec 2019' },
+  { id: '2000', label: 'Since 2000',     phrase: 'since 2000' },
+  { id: 'max',  label: 'Max',            phrase: 'all-time' },
+];
+function anchorById(id) { return ANCHORS.find(a => a.id === id) || ANCHORS[1]; }
+function anchorDate(id, data) {
+  if (id === '1y')  { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d.toISOString().slice(0, 10); }
+  if (id === '2025') return '2025-01-01';
+  if (id === '2019') return '2019-12-01';
+  if (id === '2000') return '2000-01-01';
+  return (data && data.length) ? data[0].date : '1900-01-01';
 }
 
 // Render the card to a branded PNG by drawing directly to a canvas.
@@ -113,7 +134,6 @@ async function downloadCardAsPNG({
   const INK   = '#0E1320';
   const NAVY  = '#1B2A4E';
   const MUTE  = '#6B6E78';
-  const SOFT  = '#9A9CA3';
   const SERIF   = '"Source Serif 4", Georgia, serif';
   const DISPLAY = '"Inter Tight", system-ui, sans-serif';
 
@@ -167,8 +187,8 @@ async function downloadCardAsPNG({
   ctx.fillStyle = accent;
   ctx.fillRect(padX, cardTop, W - padX * 2, 4);
 
-  // Eyebrow
-  const eyebrow = categoryLabel(item.category).toUpperCase();
+  // Eyebrow — item.eyebrow (state name) wins over the category label
+  const eyebrow = (item.eyebrow || categoryLabel(item.category)).toUpperCase();
   ctx.textAlign = 'left';
   ctx.fillStyle = accent;
   ctx.font = `700 18px ${DISPLAY}`;
@@ -261,13 +281,13 @@ function downloadCSV(item) {
   const body = item.data.map(r => `${r.date},${r.value},"${units}"`).join('\n');
   const sourceLine = item.fred_id
     ? `# ${item.label} — FRED ${item.fred_id}\n# Source: https://fred.stlouisfed.org/series/${item.fred_id}\n`
-    : `# ${item.label} — ${item.source_note || 'Derived from FRED/BLS data'}\n`;
+    : `# ${item.label} — ${item.source_note || 'Derived from public data'}\n`;
   const csv = `${sourceLine}${header}${body}\n`;
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${item.id}-${item.fred_id || 'derived'}.csv`;
+  a.download = `${item.id}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -309,34 +329,20 @@ function valueAt(data, dateStr) {
   return v;
 }
 
-function rebase(data, baseDate) {
-  // Return data rescaled so value at baseDate = 100
-  const base = valueAt(data, baseDate);
-  if (!base) return data.map(d => ({ ...d, value: 100 }));
-  return data.map(d => ({ date: d.date, value: (d.value / base) * 100 }));
-}
-
 function sliceFrom(data, fromDateStr) {
   const cutoff = new Date(fromDateStr);
   return data.filter(d => new Date(d.date) >= cutoff);
 }
 
-// Build a smoothed SVG line path
-function linePath(points, w, h) {
+// Build an SVG line path (used by the compare-view sparklines)
+function linePath(points) {
   if (!points.length) return '';
   return points.map((p, i) => (i === 0 ? `M${p.x.toFixed(1)},${p.y.toFixed(1)}` : `L${p.x.toFixed(1)},${p.y.toFixed(1)}`)).join(' ');
 }
 
-function areaPath(points, w, h) {
-  if (!points.length) return '';
-  const top = points.map((p, i) => (i === 0 ? `M${p.x.toFixed(1)},${p.y.toFixed(1)}` : `L${p.x.toFixed(1)},${p.y.toFixed(1)}`)).join(' ');
-  return `${top} L${points[points.length - 1].x.toFixed(1)},${h} L${points[0].x.toFixed(1)},${h} Z`;
-}
-
-// Map data series to SVG points
 function toPoints(data, w, h, opts = {}) {
   if (!data || data.length === 0) return [];
-  const pad = opts.pad || 4;
+  const pad = opts.pad || 3;
   const vals = data.map(d => d.value);
   const min = opts.min ?? Math.min(...vals);
   const max = opts.max ?? Math.max(...vals);
@@ -349,13 +355,6 @@ function toPoints(data, w, h, opts = {}) {
   }));
 }
 
-// Useful event annotations for long-running charts
-const EVENTS = [
-  { date: '2008-09-01', label: 'Financial crisis' },
-  { date: '2020-03-01', label: 'COVID shock' },
-  { date: '2022-06-01', label: 'Inflation peak' },
-];
-
 // Hours of work needed at avg hourly earnings to afford X
 function hoursToAfford(price, wage) {
   if (!wage) return null;
@@ -363,14 +362,11 @@ function hoursToAfford(price, wage) {
 }
 
 // Convert a CPI level into a real-dollar price (illustrative anchor)
-// We use bureau-published reference points where useful.
 const REFERENCE_PRICES = {
   // Approx avg US weekly grocery bill for a family of 4 in 2025 ≈ $290 (USDA moderate plan, scaled)
   groceriesWeekly2025: 290,
   // Median US rent 2025 ≈ $1,540
   rentMonthly2025: 1540,
-  // Median home price 2025 ≈ $420k
-  homePrice2025: 420000,
 };
 
 // For a CPI series, scale a reference price by the ratio of CPI(date) / CPI(2025-01)
@@ -382,16 +378,56 @@ function scaleByCPI(series, date, refPrice, anchorDate = '2025-01-01') {
 }
 
 const CATEGORY_LABELS = {
-  labor: 'Income', daily: 'Daily', groceries: 'Groceries', big: 'Big-ticket',
-  debt: 'Debt', state: 'By State',
+  labor: 'Work & Wages', daily: 'Daily', groceries: 'Groceries', big: 'Big-ticket',
+  debt: 'Debt',
 };
 function categoryLabel(category) {
   return CATEGORY_LABELS[category] || 'Big-ticket';
 }
 
+// Press-release-ready sentence for the "Copy fact" button. Composes the two
+// message anchors (Jan 2025 and pre-pandemic) plus the level for dollar
+// series, and always names the source.
+function buildFactText(item, opts = {}) {
+  const name = opts.factLabel || item.label;
+  const isDollar = (item.units || '').includes('$') || (item.units || '').toLowerCase().includes('gallon');
+  const b25 = pctChange(item.data, '2025-01-01');
+  const b19 = pctChange(item.data, '2019-12-01');
+  const dir = (v) => v >= 0 ? 'up' : 'down';
+  const clauses = [];
+  if (b25 != null) clauses.push(`${dir(b25)} ${Math.abs(b25).toFixed(1)}% since January 2025`);
+  if (b19 != null) clauses.push(`${dir(b19)} ${Math.abs(b19).toFixed(1)}% since before the pandemic (Dec 2019)`);
+  const changePart = clauses.length ? ` — ${clauses.join(', ')}` : '';
+  const level = isDollar && item.latest_value != null
+    ? `${name}: ${fmtVal(item.latest_value, item.units)} (${fmtDate(item.latest_date)})`
+    : `${name} (${fmtDate(item.latest_date)})`;
+  const src = item.fred_id
+    ? `${item.source_note || 'FRED'} series ${item.fred_id}`
+    : (item.source_note || 'federal data');
+  return `${level}${changePart}. Source: ${src}, via the Economic Security Project Affordability Tracker.`;
+}
+
+// Lazy loader for the split state payloads (data/states/*.js and
+// data/state_metrics/*.js). Each file assigns into a window global; the
+// promise resolving means that global is populated.
+const _loadedFiles = {};
+function loadDataFile(src) {
+  if (!_loadedFiles[src]) {
+    _loadedFiles[src] = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = () => { delete _loadedFiles[src]; reject(new Error('failed to load ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+  return _loadedFiles[src];
+}
+
 Object.assign(window, {
-  ESP, fmtVal, fmtDate, pctChange, valueAt, rebase, sliceFrom, downloadCSV, downloadCardAsPNG,
-  linePath, areaPath, toPoints, EVENTS, hoursToAfford, REFERENCE_PRICES, scaleByCPI, categoryLabel,
+  ESP, fmtVal, fmtDate, pctChange, valueAt, sliceFrom, downloadCSV, downloadCardAsPNG,
+  linePath, toPoints, hoursToAfford, REFERENCE_PRICES, scaleByCPI, categoryLabel,
+  ANCHORS, anchorById, anchorDate, buildFactText, loadDataFile,
 });
 
 })();
@@ -399,36 +435,16 @@ Object.assign(window, {
 
 <script type="text/babel" data-presets="react">
 (function() {
-// V3 — "Affordability Atlas" (iteration 2)
-// Dark navy hero. Filter pills + per-item checkboxes select which series
-// appear as interactive Chart.js cards (transparent backgrounds, hover tooltips)
-// and in the year-by-year heatmap.
+// ── Main app ─────────────────────────────────────────────────────────────────
+// Three views over the same design language:
+//   National        — every national series as selectable chart cards + heatmap
+//   My State        — all metrics for one state, each vs. the US (dashed)
+//   Compare States  — one metric across all states: overlay chart + sparkline grid
 
-const { ESP, fmtVal, fmtDate, pctChange, valueAt, sliceFrom, downloadCSV, downloadCardAsPNG, categoryLabel, hoursToAfford, REFERENCE_PRICES, scaleByCPI } = window;
+const { ESP, fmtVal, fmtDate, pctChange, valueAt, sliceFrom, downloadCSV, downloadCardAsPNG,
+        linePath, toPoints, categoryLabel, hoursToAfford, REFERENCE_PRICES, scaleByCPI,
+        ANCHORS, anchorById, anchorDate, buildFactText, loadDataFile } = window;
 const { useState, useMemo, useEffect, useRef } = React;
-
-const FILTERS = [
-  { id: 'daily',     label: 'Daily items',  matches: (it) => it.category === 'daily' },
-  { id: 'big',       label: 'Big-ticket',   matches: (it) => it.category === 'big' },
-  { id: 'groceries', label: 'Groceries',    matches: (it) => it.category === 'groceries' },
-  { id: 'work',      label: 'Work & wages', matches: (it) => it.category === 'labor' },
-  { id: 'debt',      label: 'Debt',         matches: (it) => it.category === 'debt' },
-  { id: 'state',     label: 'By state',     matches: (it) => it.category === 'state' },
-  { id: 'newest',    label: 'Newest',       matches: (it) => !!it.is_new },
-  { id: 'all',       label: 'All metrics',  matches: () => true },
-];
-
-const STATE_OPTIONS = [
-  { code: 'CA', name: 'California' },
-  { code: 'TX', name: 'Texas' },
-  { code: 'FL', name: 'Florida' },
-  { code: 'OH', name: 'Ohio' },
-  { code: 'PA', name: 'Pennsylvania' },
-];
-
-// ── Per-series annotations ────────────────────────────────────────────────
-// Annotations disabled per design direction.
-const ANNOTATIONS = {};
 
 const NAVY = '#1B2A4E';
 const WARM_RED = '#E04E39';
@@ -437,6 +453,17 @@ const PAPER = '#FBF7EE';
 const INK = '#0E1320';
 const MUTE = '#6B6E78';
 const SOFT = '#9A9CA3';
+
+const CATEGORY_META = [
+  { id: 'daily',     label: 'Daily items' },
+  { id: 'groceries', label: 'Groceries' },
+  { id: 'big',       label: 'Big-ticket' },
+  { id: 'labor',     label: 'Work & wages' },
+  { id: 'debt',      label: 'Debt' },
+];
+
+// Distinct colors assigned to pinned states in the compare view
+const PIN_COLORS = ['#E04E39', '#7C3AED', '#0D9488', '#B45309', '#DB2777', '#2563EB', '#059669', '#64748B'];
 
 // Lazy-load Chart.js + date adapter once
 let chartJsPromise = null;
@@ -466,7 +493,7 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-const v3Styles = {
+const styles = {
   root: {
     width: '100%', minHeight: 1700, background: BEIGE, color: INK,
     fontFamily: '"Public Sans", system-ui, sans-serif',
@@ -482,7 +509,7 @@ const v3Styles = {
   },
   hero: {
     background: NAVY, color: PAPER,
-    padding: '64px 56px 56px',
+    padding: '56px 56px 44px',
     position: 'relative', overflow: 'hidden',
   },
   kicker: {
@@ -501,65 +528,51 @@ const v3Styles = {
     fontSize: 20, lineHeight: 1.55, color: '#E8C9A8', maxWidth: 720,
     fontStyle: 'italic',
   },
-  heroMeta: {
-    marginTop: 40, paddingTop: 22,
-    borderTop: '1px solid rgba(244,236,216,.16)',
-    display: 'flex', gap: 36, alignItems: 'baseline',
-    fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-    fontSize: 11, letterSpacing: '.18em', textTransform: 'uppercase',
-    color: '#9BA8C2',
-  },
-  filterBar: {
+  controls: {
     background: PAPER, borderBottom: `1px solid rgba(27,42,78,.18)`,
-    padding: '20px 56px',
+    padding: '16px 56px',
     display: 'flex', alignItems: 'center', gap: 20,
   },
-  filterLabel: {
+  controlLabel: {
     fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
     fontSize: 11, letterSpacing: '.22em', textTransform: 'uppercase',
     fontWeight: 700, color: MUTE,
   },
-  pillRow: {
-    display: 'flex', gap: 8, flex: 1, flexWrap: 'wrap',
-  },
-  pill: (active) => ({
+  viewTab: (active) => ({
     fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-    fontSize: 13, fontWeight: active ? 700 : 600,
-    letterSpacing: '.02em',
-    padding: '9px 16px',
-    border: `1.5px solid ${active ? NAVY : 'rgba(27,42,78,.22)'}`,
-    background: active ? NAVY : 'transparent',
-    color: active ? PAPER : INK,
+    fontSize: 15, fontWeight: active ? 700 : 600,
+    background: active ? PAPER : 'transparent',
+    color: active ? NAVY : 'rgba(244,238,225,.85)',
+    border: `1.5px solid ${active ? PAPER : 'rgba(244,238,225,.32)'}`,
+    padding: '12px 22px',
     cursor: 'pointer',
     transition: 'all .15s',
-    borderRadius: 100,
+    boxShadow: active ? '0 2px 0 rgba(0,0,0,.18)' : 'none',
   }),
-  countBadge: (active) => ({
+  anchorBtn: (active) => ({
     fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-    fontSize: 11, fontWeight: 700,
-    marginLeft: 8, padding: '1px 7px',
-    borderRadius: 100,
-    background: active ? 'rgba(244,236,216,.2)' : 'rgba(27,42,78,.08)',
+    fontSize: 12, fontWeight: active ? 700 : 600, letterSpacing: '.03em',
+    background: active ? NAVY : 'transparent',
+    color: active ? PAPER : INK,
+    border: `1.5px solid ${active ? NAVY : 'rgba(27,42,78,.22)'}`,
+    padding: '7px 13px', cursor: 'pointer', borderRadius: 100,
+    transition: 'all .12s',
+  }),
+  modeBtn: (active) => ({
+    fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+    fontSize: 11, fontWeight: 700, letterSpacing: '.05em',
+    background: active ? NAVY : 'transparent',
     color: active ? PAPER : MUTE,
+    border: `1px solid ${active ? NAVY : 'rgba(27,42,78,.22)'}`,
+    padding: '6px 11px', cursor: 'pointer',
   }),
-  // Per-item checkbox row, sits below the pill row
-  checkBar: {
-    background: PAPER, borderBottom: `1px solid rgba(27,42,78,.18)`,
-    padding: '14px 56px 18px',
-    display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-  },
-  checkLabel: {
-    fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-    fontSize: 11, letterSpacing: '.22em', textTransform: 'uppercase',
-    fontWeight: 700, color: MUTE, marginRight: 4,
-  },
   checkChip: (on, accent) => ({
     fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
     fontSize: 13, fontWeight: 600,
     padding: '6px 12px 6px 10px',
-    border: `1px solid ${on ? accent : 'rgba(27,42,78,.18)'}`,
+    border: `1px solid ${on ? accent : 'rgba(27,42,78,.16)'}`,
     background: on ? hexToRgba(accent, 0.08) : 'transparent',
-    color: on ? INK : MUTE,
+    color: on ? INK : SOFT,
     cursor: 'pointer',
     transition: 'all .12s',
     borderRadius: 6,
@@ -567,20 +580,23 @@ const v3Styles = {
   }),
   checkBox: (on, accent) => ({
     width: 14, height: 14, borderRadius: 3,
-    border: `1.5px solid ${on ? accent : 'rgba(27,42,78,.3)'}`,
+    border: `1.5px solid ${on ? accent : 'rgba(27,42,78,.25)'}`,
     background: on ? accent : 'transparent',
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
     color: PAPER, fontSize: 10, fontWeight: 800,
     flexShrink: 0,
   }),
-  toggleAll: {
+  catPill: (state) => ({
+    // state: 'all' | 'some' | 'none'
     fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-    fontSize: 11, fontWeight: 700, color: NAVY,
-    background: 'transparent', border: 'none',
-    cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '.1em',
-    marginLeft: 'auto',
-    textDecoration: 'underline', textUnderlineOffset: 3,
-  },
+    fontSize: 11, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase',
+    padding: '6px 12px',
+    border: `1.5px solid ${state === 'none' ? 'rgba(27,42,78,.22)' : NAVY}`,
+    background: state === 'all' ? NAVY : state === 'some' ? hexToRgba(NAVY, 0.08) : 'transparent',
+    color: state === 'all' ? PAPER : state === 'some' ? NAVY : MUTE,
+    cursor: 'pointer', borderRadius: 100, transition: 'all .12s',
+    flexShrink: 0,
+  }),
   sectionHead: {
     display: 'flex', alignItems: 'baseline', gap: 14,
     marginBottom: 18, paddingBottom: 8,
@@ -598,71 +614,82 @@ const v3Styles = {
     fontFamily: 'Publico, Georgia, serif', fontSize: 14, fontStyle: 'italic',
     color: MUTE, marginLeft: 'auto',
   },
+  smallBtn: {
+    fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+    fontSize: 9, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase',
+    background: 'transparent', color: NAVY,
+    border: `1px solid rgba(27,42,78,.25)`,
+    padding: '3px 7px', cursor: 'pointer',
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+  },
+  select: {
+    fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+    fontSize: 14, fontWeight: 600, color: INK,
+    background: PAPER, border: `1.5px solid ${NAVY}`,
+    padding: '9px 12px', cursor: 'pointer', borderRadius: 4,
+  },
 };
 
-// ── Hero stats ──────────────────────────────────────────────────────────────
-function HeroStat({ label, value, sub }) {
+// ── Copy-fact button (shared by all cards) ──────────────────────────────────
+function CopyFactButton({ item, factLabel }) {
+  const [copied, setCopied] = useState(false);
   return (
-    <div>
-      <div style={{
-        fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-        fontSize: 11, letterSpacing: '.18em', textTransform: 'uppercase',
-        fontWeight: 600, color: '#9BA8C2', marginBottom: 8,
-      }}>{label}</div>
-      <div style={{
-        fontFamily: 'Publico, Georgia, serif',
-        fontSize: 88, fontWeight: 500, color: PAPER, lineHeight: 1, letterSpacing: '-0.025em',
-      }}>{value}</div>
-      <div style={{
-        fontFamily: 'Publico, Georgia, serif', fontSize: 16, fontStyle: 'italic',
-        color: '#E8C9A8', marginTop: 14, lineHeight: 1.5, maxWidth: 420,
-      }}>{sub}</div>
-    </div>
+    <button
+      style={{ ...styles.smallBtn, ...(copied ? { background: '#2E7D5B', borderColor: '#2E7D5B', color: PAPER } : {}) }}
+      title="Copy a press-ready sentence with the latest numbers"
+      onClick={async () => {
+        const text = buildFactText(item, { factLabel });
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1600);
+        } catch (e) { window.prompt('Copy this fact:', text); }
+      }}
+      onMouseEnter={(e) => { if (!copied) { e.currentTarget.style.background = NAVY; e.currentTarget.style.color = PAPER; } }}
+      onMouseLeave={(e) => { if (!copied) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = NAVY; } }}
+    >{copied ? '✓ Copied' : 'Copy fact'}</button>
   );
 }
 
 // ── Interactive Chart.js card ───────────────────────────────────────────────
-// Transparent background, soft area fill, hover tooltip — matches original index.html.
-function ChartCard({ item, since }) {
+// Transparent background, soft area fill, hover tooltip. `overlayItem` draws
+// a dashed national-comparison line (used on state cards). `displayMode`
+// 'pct' rebases everything to cumulative % change since the anchor.
+function ChartCard({ item, anchorId, displayMode, overlayItem, factLabel }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
   const cardRef = useRef(null);
   const [chartReady, setChartReady] = useState(!!window.Chart);
-  const accent = item.color || (item.category === 'labor' ? NAVY : WARM_RED);
+  const accent = item.color || WARM_RED;
 
-  // Per-card date range. Default matches the global "since 2020" framing.
-  const RANGE_OPTIONS = [
-    { id: '1Y',     label: '1Y',     yearsAgo: 1 },
-    { id: '2025',   label: 'Since 2025', sinceDate: '2025-01-01' },
-    { id: '2020',   label: 'Since 2020', sinceDate: '2020-01-01' },
-    { id: '10Y',    label: '10Y',    yearsAgo: 10 },
-    { id: 'Max',    label: 'Max',    yearsAgo: null },
-  ];
-  const [rangeId, setRangeId] = useState('2020');
-  const activeRange = RANGE_OPTIONS.find(r => r.id === rangeId) || RANGE_OPTIONS[2];
-  const cardSince = (() => {
-    if (activeRange.sinceDate) return activeRange.sinceDate;
-    if (activeRange.yearsAgo == null) return item.data[0]?.date || since;
-    const d = new Date();
-    d.setFullYear(d.getFullYear() - activeRange.yearsAgo);
-    return d.toISOString().slice(0, 10);
-  })();
+  // Per-card override of the global anchor; resets when the global changes.
+  const [ovr, setOvr] = useState(null);
+  useEffect(() => { setOvr(null); }, [anchorId]);
+  const activeId = ovr || anchorId;
+  const active = anchorById(activeId);
+  const cardSince = anchorDate(activeId, item.data);
 
-  // Slice + (optionally) rebase to % change since the first visible point.
-  // Index series (item.rebase) get rebased so the chart y-axis reads as a
-  // cumulative percent change over the active range; everything else stays
-  // in its native units ($, %, etc.).
-  const visibleData  = sliceFrom(item.data, cardSince);
-  const v0           = (item.rebase && visibleData.length) ? visibleData[0].value : null;
-  const displayData  = item.rebase
-    ? visibleData.map(d => ({ date: d.date, value: v0 ? (d.value / v0 - 1) * 100 : 0 }))
-    : visibleData;
-  const displayUnits = item.rebase
+  // Index series always display as % change; everything else follows the
+  // global $/% toggle.
+  const asPct = item.rebase || displayMode === 'pct';
+
+  const visibleData = sliceFrom(item.data, cardSince);
+  const v0 = (asPct && visibleData.length) ? visibleData[0].value : null;
+  const toPct = (data, base) => data.map(d => ({ date: d.date, value: base ? (d.value / base - 1) * 100 : 0 }));
+  const displayData = asPct ? toPct(visibleData, v0) : visibleData;
+  const displayUnits = asPct
     ? `% change since ${fmtDate(visibleData[0]?.date || cardSince, { year: 'numeric', month: 'short' })}`
     : item.units;
-  const headlineVal  = item.rebase
+  const headlineVal = asPct
     ? (displayData.length ? displayData[displayData.length - 1].value : 0)
     : item.latest_value;
+
+  // Optional national overlay, transformed the same way
+  const overlayVisible = overlayItem ? sliceFrom(overlayItem.data, cardSince) : null;
+  const o0 = (asPct && overlayVisible && overlayVisible.length) ? overlayVisible[0].value : null;
+  const overlayDisplay = overlayVisible
+    ? (asPct ? toPct(overlayVisible, o0) : overlayVisible)
+    : null;
 
   useEffect(() => {
     loadChartJs().then(() => setChartReady(true));
@@ -678,13 +705,12 @@ function ChartCard({ item, since }) {
     grad.addColorStop(0.7, hexToRgba(accent, 0.04));
     grad.addColorStop(1, hexToRgba(accent, 0));
 
-    const annotations = ANNOTATIONS[item.id] || [];
-
-    // Tight, round-numbered y-axis bounds. Pick a "nice" step (1/2/5 × 10ⁿ)
-    // sized for the data range, then snap min/max to multiples of it. This
-    // keeps the axis close to the data without leaving Chart.js's tick
-    // chooser to pick arbitrary numbers inside narrow bounds.
-    const yVals = displayData.map(d => d.value).filter(v => Number.isFinite(v));
+    // Tight, round-numbered y-axis bounds across BOTH datasets. Pick a
+    // "nice" step (1/2/5 × 10ⁿ) sized for the data range, then snap min/max
+    // to multiples of it.
+    const yVals = displayData.map(d => d.value)
+      .concat(overlayDisplay ? overlayDisplay.map(d => d.value) : [])
+      .filter(v => Number.isFinite(v));
     const dataMin = yVals.length ? Math.min(...yVals) : 0;
     const dataMax = yVals.length ? Math.max(...yVals) : 1;
     const dataRange = (dataMax - dataMin) || Math.max(Math.abs(dataMax), 1);
@@ -697,94 +723,41 @@ function ChartCard({ item, since }) {
     const yMin = Math.floor(dataMin / yStep) * yStep;
     const yMax = Math.ceil(dataMax / yStep) * yStep;
 
-    // Plugin: draw annotation pins + labels
-    const annotationPlugin = {
-      id: 'esp-annotations',
-      afterDatasetsDraw(chart) {
-        if (!annotations.length) return;
-        const { ctx, chartArea, scales } = chart;
-        const { left, right, top } = chartArea;
-        ctx.save();
-        ctx.font = '600 9px "Inter Tight", system-ui, sans-serif';
-        ctx.textBaseline = 'middle';
-
-        annotations.forEach((ann, i) => {
-          const t = new Date(ann.date).getTime();
-          const x = scales.x.getPixelForValue(t);
-          if (x < left || x > right) return;
-
-          const datasetData = chart.data.datasets[0].data;
-          let nearest = datasetData[0];
-          let minDist = Infinity;
-          for (const d of datasetData) {
-            const dist = Math.abs(new Date(d.x).getTime() - t);
-            if (dist < minDist) { minDist = dist; nearest = d; }
-          }
-          const y = scales.y.getPixelForValue(nearest.y);
-
-          // Vertical hairline
-          ctx.strokeStyle = hexToRgba(NAVY, 0.35);
-          ctx.lineWidth = 1;
-          ctx.setLineDash([2, 3]);
-          ctx.beginPath();
-          ctx.moveTo(x, y - 4);
-          ctx.lineTo(x, top + 4);
-          ctx.stroke();
-          ctx.setLineDash([]);
-
-          // Pin dot
-          ctx.fillStyle = NAVY;
-          ctx.beginPath();
-          ctx.arc(x, y, 3, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = PAPER;
-          ctx.beginPath();
-          ctx.arc(x, y, 1.5, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Label tucked at the top
-          const text = ann.label.toUpperCase();
-          const textW = ctx.measureText(text).width;
-          const labelY = top + 9 + (i % 2) * 14;
-          const labelX = Math.max(left + textW / 2 + 4, Math.min(right - textW / 2 - 4, x));
-          const padX = 5, padY = 3;
-          ctx.fillStyle = PAPER;
-          ctx.strokeStyle = hexToRgba(NAVY, 0.4);
-          ctx.lineWidth = 1;
-          ctx.fillRect(labelX - textW / 2 - padX, labelY - 6 - padY, textW + padX * 2, 12 + padY * 2 - 4);
-          ctx.strokeRect(labelX - textW / 2 - padX, labelY - 6 - padY, textW + padX * 2, 12 + padY * 2 - 4);
-
-          ctx.fillStyle = NAVY;
-          ctx.textAlign = 'center';
-          ctx.fillText(text, labelX, labelY);
-        });
-        ctx.restore();
-      },
-    };
+    const datasets = [{
+      label: item.label,
+      data: displayData.map(d => ({ x: d.date, y: d.value })),
+      borderColor: accent,
+      backgroundColor: grad,
+      borderWidth: 1.8,
+      pointRadius: 0,
+      pointHoverRadius: 5,
+      pointHoverBackgroundColor: accent,
+      pointHoverBorderColor: PAPER,
+      pointHoverBorderWidth: 2,
+      tension: 0.32,
+      fill: 'start',
+    }];
+    if (overlayDisplay && overlayDisplay.length) {
+      datasets.push({
+        label: 'US average',
+        data: overlayDisplay.map(d => ({ x: d.date, y: d.value })),
+        borderColor: hexToRgba(NAVY, 0.65),
+        borderWidth: 1.4,
+        borderDash: [5, 4],
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        tension: 0.32,
+        fill: false,
+      });
+    }
 
     chartRef.current = new window.Chart(ctx, {
       type: 'line',
-      data: {
-        datasets: [{
-          label: item.label,
-          data: displayData.map(d => ({ x: d.date, y: d.value })),
-          borderColor: accent,
-          backgroundColor: grad,
-          borderWidth: 1.8,
-          pointRadius: 0,
-          pointHoverRadius: 5,
-          pointHoverBackgroundColor: accent,
-          pointHoverBorderColor: PAPER,
-          pointHoverBorderWidth: 2,
-          tension: 0.32,
-          fill: 'start',
-        }],
-      },
-      plugins: [annotationPlugin],
+      data: { datasets },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        layout: { padding: { top: annotations.length ? 30 : 8 } },
+        layout: { padding: { top: 8 } },
         animation: { duration: 350, easing: 'easeOutQuart' },
         interaction: { intersect: false, mode: 'index' },
         plugins: {
@@ -802,20 +775,20 @@ function ChartCard({ item, since }) {
             bodyFont:  { size: 13, family: 'Source Serif 4, Georgia, serif', weight: '600' },
             callbacks: {
               title: (c) => fmtDate(c[0].parsed.x, { year: 'numeric', month: 'long' }),
-              label: (c) => '  ' + fmtVal(c.parsed.y, displayUnits),
+              label: (c) => `  ${datasets.length > 1 ? c.dataset.label + ': ' : ''}` + fmtVal(c.parsed.y, displayUnits),
             },
           },
         },
         scales: {
           x: {
             type: 'time',
-            time: { unit: activeRange.id === '1Y' ? 'month' : activeRange.id === '5Y' ? 'year' : 'year' },
+            time: { unit: activeId === '1y' ? 'month' : 'year' },
             grid: { display: false },
             border: { display: false },
             ticks: {
               color: MUTE,
               font: { size: 10, family: 'Inter Tight, system-ui' },
-              maxTicksLimit: activeRange.id === '1Y' ? 6 : 5,
+              maxTicksLimit: activeId === '1y' ? 6 : 5,
             },
           },
           y: {
@@ -838,11 +811,31 @@ function ChartCard({ item, since }) {
     return () => {
       if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
     };
-  }, [chartReady, item, cardSince, accent]);
+  }, [chartReady, item, cardSince, accent, displayMode, overlayItem]);
 
   const change = pctChange(item.data, cardSince);
   const up = change != null && change >= 0;
   const bad = item.invert_color ? !up : up;
+  const changeColorFor = (v) => (item.invert_color ? v < 0 : v >= 0) ? WARM_RED : '#2E7D5B';
+
+  // The two message anchors, always visible regardless of the active range
+  const b25 = pctChange(item.data, '2025-01-01');
+  const b19 = pctChange(item.data, '2019-12-01');
+  const badge = (v, lbl) => v == null ? null : (
+    <span key={lbl} style={{ whiteSpace: 'nowrap' }}>
+      <span style={{ color: MUTE }}>{lbl} </span>
+      <span style={{ color: changeColorFor(v), fontWeight: 700 }}>
+        {v >= 0 ? '+' : '−'}{Math.abs(v).toFixed(1)}%
+      </span>
+    </span>
+  );
+
+  const headlineText = asPct
+    ? (headlineVal >= 0 ? '+' : '') + headlineVal.toFixed(1) + '%'
+    : fmtVal(headlineVal, displayUnits);
+  const changeText = asPct
+    ? (up ? '↑ ' : '↓ ') + active.phrase
+    : (up ? '↑ +' : '↓ ') + Math.abs(change || 0).toFixed(1) + '% ' + active.phrase;
 
   return (
     <div ref={cardRef} style={{
@@ -858,7 +851,7 @@ function ChartCard({ item, since }) {
             fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
             fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase',
             fontWeight: 700, color: accent, marginBottom: 4,
-          }}>{categoryLabel(item.category)}</div>
+          }}>{item.eyebrow || categoryLabel(item.category)}</div>
           <div style={{
             fontFamily: 'Publico, Georgia, serif',
             fontSize: 20, fontWeight: 500, lineHeight: 1.15, color: INK,
@@ -872,28 +865,39 @@ function ChartCard({ item, since }) {
           <div style={{
             fontFamily: 'Publico, Georgia, serif',
             fontSize: 28, fontWeight: 500, lineHeight: 1, color: INK,
-          }}>{item.rebase ? (headlineVal >= 0 ? '+' : '') + headlineVal.toFixed(1) + '%' : fmtVal(headlineVal, displayUnits)}</div>
+          }}>{headlineText}</div>
           <div style={{
             fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
             fontSize: 11, fontWeight: 700, marginTop: 6,
             color: bad ? WARM_RED : '#2E7D5B',
-          }}>{item.rebase
-              ? (up ? '↑ ' : '↓ ') + (activeRange.id === '2020' ? 'since 2020' : activeRange.id === '2025' ? 'since 2025' : activeRange.id === 'Max' ? 'all-time' : `over ${activeRange.label}`)
-              : (up ? '↑ +' : '↓ ') + Math.abs(change || 0).toFixed(1) + '% ' + (activeRange.id === '2020' ? 'since 2020' : activeRange.id === '2025' ? 'since 2025' : activeRange.id === 'Max' ? 'all-time' : `over ${activeRange.label}`)}</div>
+          }}>{changeText}</div>
         </div>
       </div>
+
+      {/* Dual anchor badges — the two numbers a press release needs */}
+      {(b25 != null || b19 != null) && (
+        <div style={{
+          fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+          fontSize: 11, display: 'flex', gap: 14, flexWrap: 'wrap',
+          padding: '7px 10px', background: hexToRgba(NAVY, 0.045),
+          border: `1px solid rgba(27,42,78,.08)`, borderRadius: 4,
+        }}>
+          {badge(b25, "Since Jan '25")}
+          {badge(b19, 'Since pre-pandemic')}
+        </div>
+      )}
 
       {/* Range buttons */}
       <div className="at-range-row" style={{
         display: 'flex', gap: 4, alignItems: 'center',
-        margin: '6px 0 -4px',
+        margin: '2px 0 -4px',
       }}>
-        {RANGE_OPTIONS.map(r => {
-          const on = r.id === rangeId;
+        {ANCHORS.map(r => {
+          const on = r.id === activeId;
           return (
             <button
               key={r.id}
-              onClick={() => setRangeId(r.id)}
+              onClick={() => setOvr(r.id)}
               style={{
                 fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
                 fontSize: 10, fontWeight: 600, letterSpacing: '.05em',
@@ -913,6 +917,14 @@ function ChartCard({ item, since }) {
       <div style={{ height: 240, position: 'relative' }}>
         <canvas ref={canvasRef} />
       </div>
+      {overlayItem && (
+        <div style={{
+          fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+          fontSize: 10, color: MUTE, marginTop: -6,
+        }}>
+          <span style={{ borderBottom: `2px dashed ${hexToRgba(NAVY, 0.65)}`, paddingBottom: 1 }}>– –</span> US average
+        </div>
+      )}
 
       {/* Footer */}
       <div style={{
@@ -934,52 +946,28 @@ function ChartCard({ item, since }) {
             Source · FRED · {item.fred_id} ↗
           </a>
         ) : (
-          <span>{item.source_note || 'Derived from FRED/BLS data'}</span>
+          <span>{item.source_note || 'Derived from public data'}</span>
         )}
         <span style={{ display: 'flex', gap: 8, alignItems: 'center' }} data-export-hide>
-          <span>{item.units}</span>
+          <CopyFactButton item={item} factLabel={factLabel} />
           <button
             onClick={() => downloadCSV(item)}
-            style={{
-              fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-              fontSize: 9, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase',
-              background: 'transparent', color: NAVY,
-              border: `1px solid rgba(27,42,78,.25)`,
-              padding: '3px 7px', cursor: 'pointer',
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-            }}
+            style={styles.smallBtn}
             onMouseEnter={(e) => { e.currentTarget.style.background = NAVY; e.currentTarget.style.color = PAPER; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = NAVY; }}
           >↓ CSV</button>
           <button
             onClick={async () => {
               const chartCanvas = cardRef.current?.querySelector('canvas');
-              const headlineText = item.rebase
-                ? (headlineVal >= 0 ? '+' : '') + headlineVal.toFixed(1) + '%'
-                : fmtVal(headlineVal, displayUnits);
-              const rangeLabel = activeRange.id === '2020' ? 'since 2020'
-                : activeRange.id === '2025' ? 'since 2025'
-                : activeRange.id === 'Max'  ? 'all-time'
-                : `over ${activeRange.label}`;
-              const changeText = item.rebase
-                ? (up ? '↑ ' : '↓ ') + rangeLabel
-                : (up ? '↑ +' : '↓ ') + Math.abs(change || 0).toFixed(1) + '% ' + rangeLabel;
               const changeColor = bad ? WARM_RED : '#2E7D5B';
               try {
                 await downloadCardAsPNG({
                   chartCanvas, item, accent,
-                  headlineText, changeText, changeColor, rangeLabel,
+                  headlineText, changeText, changeColor, rangeLabel: active.phrase,
                 });
               } catch (err) { console.error('PNG export failed', err); }
             }}
-            style={{
-              fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-              fontSize: 9, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase',
-              background: 'transparent', color: NAVY,
-              border: `1px solid rgba(27,42,78,.25)`,
-              padding: '3px 7px', cursor: 'pointer',
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-            }}
+            style={styles.smallBtn}
             onMouseEnter={(e) => { e.currentTarget.style.background = NAVY; e.currentTarget.style.color = PAPER; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = NAVY; }}
           >↓ PNG</button>
@@ -989,7 +977,7 @@ function ChartCard({ item, since }) {
   );
 }
 
-// ── YoY heatmap ─────────────────────────────────────────────────────────────
+// ── YoY heatmap with cumulative anchor columns ──────────────────────────────
 function Heatmap({ items }) {
   const years = [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026];
 
@@ -1001,21 +989,23 @@ function Heatmap({ items }) {
       if (!cur || !prior) return null;
       return ((cur - prior) / prior) * 100;
     }),
+    cum19: pctChange(item.data, '2019-12-01'),
+    cum25: pctChange(item.data, '2025-01-01'),
   }));
 
-  const color = (v) => {
+  const colorScaled = (v, span) => {
     if (v == null) return BEIGE;
-    const clamp = Math.max(-15, Math.min(15, v));
-    const a = Math.abs(clamp) / 15;
-    if (clamp > 0) {
-      const lerp = (s, e) => Math.round(s + (e - s) * a);
-      return `rgb(${lerp(244, 224)},${lerp(236, 78)},${lerp(216, 57)})`;
-    } else {
-      const lerp = (s, e) => Math.round(s + (e - s) * a);
-      return `rgb(${lerp(244, 46)},${lerp(236, 125)},${lerp(216, 91)})`;
-    }
+    const clamp = Math.max(-span, Math.min(span, v));
+    const a = Math.abs(clamp) / span;
+    const lerp = (s, e) => Math.round(s + (e - s) * a);
+    if (clamp > 0) return `rgb(${lerp(244, 224)},${lerp(236, 78)},${lerp(216, 57)})`;
+    return `rgb(${lerp(244, 46)},${lerp(236, 125)},${lerp(216, 91)})`;
   };
-  const textColor = (v) => v == null ? MUTE : (Math.abs(v) > 7 ? PAPER : INK);
+  const color = (v) => colorScaled(v, 15);
+  // Cumulative columns cover 6+ years of change; a wider clamp keeps them
+  // from saturating uniformly red.
+  const colorCum = (v) => colorScaled(v, 40);
+  const textColor = (v, span = 15) => v == null ? MUTE : (Math.abs(v) > span * 0.47 ? PAPER : INK);
 
   if (!items.length) {
     return (
@@ -1028,6 +1018,14 @@ function Heatmap({ items }) {
       </div>
     );
   }
+
+  const cumHeader = {
+    textAlign: 'center', fontSize: 10, lineHeight: 1.25,
+    fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+    fontWeight: 700, color: WARM_RED, padding: '0 0 6px',
+    textTransform: 'uppercase', letterSpacing: '.04em',
+  };
+  const cumCell = { borderLeft: `2px solid ${BEIGE}` };
 
   return (
     <div style={{ background: PAPER, border: `1px solid rgba(27,42,78,.18)`, padding: '24px' }}>
@@ -1042,7 +1040,7 @@ function Heatmap({ items }) {
         <span>+15%</span>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: `220px repeat(${years.length}, 1fr)`, gap: 2 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `220px repeat(${years.length}, 1fr) 14px 1.35fr 1.35fr`, gap: 2 }}>
         <div></div>
         {years.map(yr => (
           <div key={yr} style={{
@@ -1051,6 +1049,9 @@ function Heatmap({ items }) {
             fontWeight: 700, color: INK, padding: '0 0 6px',
           }}>{yr}</div>
         ))}
+        <div></div>
+        <div style={cumHeader}>Since<br/>Dec '19</div>
+        <div style={cumHeader}>Since<br/>Jan '25</div>
         {matrix.map(row => (
           <React.Fragment key={row.item.id}>
             <div style={{
@@ -1072,6 +1073,17 @@ function Heatmap({ items }) {
                 {v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}`}
               </div>
             ))}
+            <div></div>
+            {[row.cum19, row.cum25].map((v, i) => (
+              <div key={'c' + i} style={{
+                background: colorCum(v), color: textColor(v, 40),
+                padding: '12px 4px', textAlign: 'center',
+                fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+                fontSize: 13, fontWeight: 700, ...cumCell,
+              }}>
+                {v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`}
+              </div>
+            ))}
           </React.Fragment>
         ))}
       </div>
@@ -1080,9 +1092,6 @@ function Heatmap({ items }) {
 }
 
 // ── Hours to afford ─────────────────────────────────────────────────────────
-// Uses the average hourly wage plus a reference price (scaled forward by
-// that item's own CPI, so it tracks inflation rather than staying frozen)
-// to answer "how many hours of work does this cost."
 function HoursToAfford({ data }) {
   const wageItem = data.hourly_earnings;
   if (!wageItem) return null;
@@ -1094,9 +1103,9 @@ function HoursToAfford({ data }) {
       label: 'A week of groceries',
       price: scaleByCPI(data.groceries.data, asOf, REFERENCE_PRICES.groceriesWeekly2025),
     },
-    data.rent && {
-      label: "A month's rent",
-      price: scaleByCPI(data.rent.data, asOf, REFERENCE_PRICES.rentMonthly2025),
+    data.zori_rent && {
+      label: "A month's rent (market)",
+      price: data.zori_rent.latest_value,
     },
   ].filter(Boolean).map(r => ({ ...r, hours: hoursToAfford(r.price, wage) })).filter(r => r.hours != null);
 
@@ -1133,30 +1142,21 @@ function HoursToAfford({ data }) {
   );
 }
 
-// ── Main V3 ─────────────────────────────────────────────────────────────────
-function V3({ data }) {
-  const allItems = useMemo(() => Object.values(data), [data]);
-  const [filterId, setFilterId] = useState('all');
-  const [selectedState, setSelectedState] = useState('CA');
-  // Set of selected item ids — start with daily items selected.
+// ── National view ────────────────────────────────────────────────────────────
+function NationalView({ data, anchorId, displayMode }) {
+  const allItems = useMemo(
+    () => Object.values(data).filter(i => !i.overlay_only),
+    [data]
+  );
+  const byCategory = useMemo(() => {
+    const m = {};
+    CATEGORY_META.forEach(c => { m[c.id] = allItems.filter(i => i.category === c.id); });
+    return m;
+  }, [allItems]);
+
   const [selectedIds, setSelectedIds] = useState(() =>
     new Set(allItems.filter(i => i.category === 'daily').map(i => i.id))
   );
-
-  const filter = FILTERS.find(f => f.id === filterId) || FILTERS[0];
-  const visibleItems = useMemo(() => {
-    const base = allItems.filter(filter.matches);
-    return filter.id === 'state' ? base.filter(i => i.geo === selectedState) : base;
-  }, [allItems, filter, selectedState]);
-  const selectedItems = useMemo(
-    () => allItems.filter(i => selectedIds.has(i.id)),
-    [allItems, selectedIds]
-  );
-
-  // When the filter (or, in state mode, the picked state) changes, auto-select everything visible.
-  useEffect(() => {
-    setSelectedIds(new Set(visibleItems.map(i => i.id)));
-  }, [filterId, selectedState]); // intentionally not on visibleItems itself
 
   const toggleId = (id) => {
     setSelectedIds(prev => {
@@ -1165,242 +1165,82 @@ function V3({ data }) {
       return n;
     });
   };
-  const selectAll = () => setSelectedIds(new Set(visibleItems.map(i => i.id)));
-  const clearAll  = () => setSelectedIds(new Set());
 
-  const visibleSelected = visibleItems.filter(i => selectedIds.has(i.id));
-  const allOn = visibleSelected.length === visibleItems.length;
-
-  // Hero stats
-  const since = '2020-01-01';
-  const pct = (id) => { const it = data[id]; return it ? pctChange(it.data, since) : null; };
-  const fmtPct = (v) => v == null ? '—' : (v >= 0 ? `+${v.toFixed(0)}%` : `${v.toFixed(0)}%`);
-
-  const HERO_STATS_BY_FILTER = {
-    daily: [
-      { label: 'Groceries since 2020', value: fmtPct(pct('groceries')),
-        sub: 'A basket that cost $100 then runs about $128 now.' },
-      { label: 'Gasoline since 2020', value: fmtPct(pct('gas')),
-        sub: 'A gallon of regular, US average — pump price.' },
-    ],
-    big: [
-      { label: 'Car insurance since 2020', value: fmtPct(pct('car_insurance')),
-        sub: 'Premiums have outpaced almost every other line.' },
-      { label: '30-yr mortgage rate', value:
-          data.mortgage ? `${data.mortgage.latest_value.toFixed(2)}%` : '—',
-        sub: 'Up from ~3% in early 2020 — the math has shifted.' },
-    ],
-    groceries: [
-      { label: 'Groceries since 2020', value: fmtPct(pct('groceries')),
-        sub: 'CPI for food at home — what households eat in.' },
-      { label: 'Wages since 2020', value: fmtPct(pct('hourly_earnings')),
-        sub: "Paychecks have grown — the question is whether they've kept up." },
-    ],
-    work: [
-      { label: 'Real wages since 2020', value: fmtPct(pct('real_hourly_earnings')),
-        sub: 'Hourly earnings after inflation — the number that matters.' },
-      { label: 'Unemployment today', value:
-          data.unemployment ? `${data.unemployment.latest_value.toFixed(1)}%` : '—',
-        sub: 'Civilian unemployment rate, seasonally adjusted.' },
-    ],
-    debt: [
-      { label: 'Credit card delinquency', value:
-          data.credit_card_delinquency ? `${data.credit_card_delinquency.latest_value.toFixed(2)}%` : '—',
-        sub: '30+ days past due, all commercial banks.' },
-      { label: 'Student loan debt', value:
-          data.student_loans ? `$${(data.student_loans.latest_value / 1000).toFixed(2)}T` : '—',
-        sub: 'Total balances owned and securitized, Federal Reserve G.19.' },
-    ],
-    state: [
-      { label: `${selectedState} unemployment`, value:
-          data[`state_${selectedState.toLowerCase()}_unemployment`]
-            ? `${data[`state_${selectedState.toLowerCase()}_unemployment`].latest_value.toFixed(1)}%` : '—',
-        sub: 'Seasonally adjusted, latest month (BLS LAUS).' },
-      { label: `${selectedState} median income`, value:
-          data[`state_${selectedState.toLowerCase()}_income`]
-            ? `$${Math.round(data[`state_${selectedState.toLowerCase()}_income`].latest_value).toLocaleString()}` : '—',
-        sub: 'Real median household income, most recent year (ACS).' },
-    ],
-    all: [
-      { label: 'Groceries since 2020', value: fmtPct(pct('groceries')),
-        sub: 'A basket that cost $100 then runs about $128 now.' },
-      { label: 'Hourly wages since 2020', value: fmtPct(pct('hourly_earnings')),
-        sub: 'Paychecks have grown — but not faster than the basket.' },
-    ],
+  // Category pills are additive bulk toggles: clicking one adds (or removes)
+  // its items without touching what's selected elsewhere — the comms team's
+  // "let me throw groceries in with Big Ticket" request. Every chip stays
+  // visible; unselected ones are grayed, not hidden.
+  const catState = (catId) => {
+    const items = byCategory[catId] || [];
+    const on = items.filter(i => selectedIds.has(i.id)).length;
+    return on === 0 ? 'none' : on === items.length ? 'all' : 'some';
   };
-  const heroStats = HERO_STATS_BY_FILTER[filterId] || HERO_STATS_BY_FILTER.all;
+  const toggleCategory = (catId) => {
+    const items = byCategory[catId] || [];
+    const state = catState(catId);
+    setSelectedIds(prev => {
+      const n = new Set(prev);
+      if (state === 'all') items.forEach(i => n.delete(i.id));
+      else items.forEach(i => n.add(i.id));
+      return n;
+    });
+  };
 
-  const filterContext = {
-    all:       'Tracking all federal price and wage data.',
-    daily:     'Costs households face every week.',
-    big:       'The expenses that shape long-term budgets.',
-    groceries: 'Food at home — the line item people quote first.',
-    work:      'Wages, jobs, and whether paychecks are keeping up.',
-    debt:      'Balances and delinquencies — how households are financing the gap.',
-    state:     'No state has its own CPI — this pairs what does exist state-by-state.',
-    newest:    'Series added in the latest release.',
-  }[filterId];
+  const selectedItems = allItems.filter(i => selectedIds.has(i.id));
+  const anchor = anchorById(anchorId);
 
   return (
-    <div style={v3Styles.root}>
-      {/* Top bar — banner placeholder */}
+    <React.Fragment>
+      {/* Selection chips, grouped by category with family colors */}
       <div className="at-pad" style={{
-        ...v3Styles.topbar,
-        justifyContent: 'center',
-        background: 'repeating-linear-gradient(-45deg, #1B2A4E 0 12px, #243561 12px 24px)',
-        color: '#FBF7EE',
-        padding: '22px 56px',
-        fontSize: 12,
-        letterSpacing: '.22em',
+        background: PAPER, borderBottom: `1px solid rgba(27,42,78,.18)`,
+        padding: '16px 56px 18px',
+        display: 'flex', flexDirection: 'column', gap: 10,
       }}>
-        This is Where the Banner Will Go
-      </div>
-
-      {/* Hero */}
-      <header className="at-pad at-hero" style={v3Styles.hero}>
-        <div style={v3Styles.kicker}>The Affordability Tracker · {(new Date()).getFullYear()}</div>
-        <h1 className="at-h1" style={v3Styles.h1}>What's gotten<br/>more expensive.</h1>
-        <p className="at-dek" style={v3Styles.dek}>
-          A long, careful look at the federal price data. Built for the people
-          who write about it, organize around it, and have to live inside it.
-        </p>
-        {(() => {
-          const stamps = allItems.map(d => d.last_updated).filter(Boolean).sort();
-          const latest = stamps.length ? stamps[stamps.length - 1] : null;
-          if (!latest) return null;
-          const formatted = new Date(latest + 'T12:00:00').toLocaleDateString('en-US', {
-            year: 'numeric', month: 'long', day: 'numeric',
-          });
-          return (
-            <div style={{
-              marginTop: 22,
-              fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-              fontSize: 12, letterSpacing: '.18em', textTransform: 'uppercase',
-              color: 'rgba(244,238,225,.6)', fontWeight: 600,
-            }}>
-              Last updated · {formatted}
-            </div>
-          );
-        })()}
-
-        {/* Filter pills — inside the hero, end of hero */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
-          marginTop: 40,
-        }}>
-          <span style={{
-            fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-            fontSize: 14, letterSpacing: '.18em', textTransform: 'uppercase',
-            color: 'rgba(244,238,225,.75)', fontWeight: 700,
-          }}>Filter</span>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            {FILTERS.map(f => {
-              const count = allItems.filter(f.matches).length;
-              const active = f.id === filterId;
+        {CATEGORY_META.map(cat => (
+          <div key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <button onClick={() => toggleCategory(cat.id)} style={{ ...styles.catPill(catState(cat.id)), width: 130, textAlign: 'center' }}>
+              {cat.label}
+            </button>
+            {(byCategory[cat.id] || []).map(item => {
+              const on = selectedIds.has(item.id);
               return (
-                <button
-                  key={f.id}
-                  onClick={() => setFilterId(f.id)}
-                  style={{
-                    fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-                    fontSize: 17, fontWeight: active ? 700 : 600,
-                    background: active ? PAPER : 'transparent',
-                    color: active ? NAVY : 'rgba(244,238,225,.9)',
-                    border: `1.5px solid ${active ? PAPER : 'rgba(244,238,225,.32)'}`,
-                    padding: '13px 24px',
-                    cursor: 'pointer',
-                    display: 'inline-flex', alignItems: 'center', gap: 12,
-                    transition: 'all .15s',
-                    boxShadow: active ? '0 2px 0 rgba(0,0,0,.18)' : 'none',
-                  }}
-                >
-                  {f.label}
-                  <span style={{
-                    fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-                    fontSize: 13, fontWeight: 700,
-                    background: active ? 'rgba(27,42,78,.12)' : 'rgba(244,238,225,.16)',
-                    color: active ? NAVY : 'rgba(244,238,225,.85)',
-                    padding: '3px 10px', borderRadius: 10,
-                  }}>{count}</span>
+                <button key={item.id} onClick={() => toggleId(item.id)} style={styles.checkChip(on, item.color || WARM_RED)}>
+                  <span style={styles.checkBox(on, item.color || WARM_RED)}>{on ? '✓' : ''}</span>
+                  {item.label}
                 </button>
               );
             })}
           </div>
-          <span style={{
-            fontFamily: 'Publico, Georgia, serif', fontSize: 13, fontStyle: 'italic',
-            color: 'rgba(244,238,225,.6)', marginLeft: 'auto',
-          }}>{filterContext}</span>
+        ))}
+        <div style={{ display: 'flex', gap: 16, marginTop: 2 }}>
+          <button
+            onClick={() => setSelectedIds(new Set(allItems.map(i => i.id)))}
+            style={{ ...styles.smallBtn, border: 'none', textDecoration: 'underline', textUnderlineOffset: 3, fontSize: 10 }}
+          >Select all</button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            style={{ ...styles.smallBtn, border: 'none', textDecoration: 'underline', textUnderlineOffset: 3, fontSize: 10 }}
+          >Clear all</button>
         </div>
-
-      </header>
-
-      {/* State picker — only in "By state" filter */}
-      {filterId === 'state' && (
-        <div className="at-pad" style={{
-          background: PAPER, borderBottom: `1px solid rgba(27,42,78,.18)`,
-          padding: '14px 56px 4px',
-          display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-        }}>
-          <span style={v3Styles.checkLabel}>State</span>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {STATE_OPTIONS.map(s => {
-              const active = s.code === selectedState;
-              return (
-                <button
-                  key={s.code}
-                  onClick={() => setSelectedState(s.code)}
-                  style={{
-                    fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-                    fontSize: 13, fontWeight: active ? 700 : 600,
-                    padding: '7px 14px',
-                    border: `1.5px solid ${active ? NAVY : 'rgba(27,42,78,.22)'}`,
-                    background: active ? NAVY : 'transparent',
-                    color: active ? PAPER : INK,
-                    cursor: 'pointer', borderRadius: 100,
-                  }}
-                >{s.name}</button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Per-item checkboxes */}
-      <div className="at-pad" style={v3Styles.checkBar}>
-        <span style={v3Styles.checkLabel}>Show</span>
-        {visibleItems.map(item => {
-          const on = selectedIds.has(item.id);
-          const accent = item.color || (item.category === 'labor' ? NAVY : WARM_RED);
-          return (
-            <button key={item.id} onClick={() => toggleId(item.id)} style={v3Styles.checkChip(on, accent)}>
-              <span style={v3Styles.checkBox(on, accent)}>{on ? '✓' : ''}</span>
-              {item.label}
-            </button>
-          );
-        })}
-        <button onClick={allOn ? clearAll : selectAll} style={v3Styles.toggleAll}>
-          {allOn ? 'Clear all' : 'Select all'}
-        </button>
       </div>
 
-      {/* Body */}
       <div className="at-pad" style={{ padding: '36px 56px 56px' }}>
-        {filterId === 'work' && <HoursToAfford data={data} />}
+        <HoursToAfford data={data} />
 
-        {/* Charts grid */}
-        <div className="at-section-head" style={v3Styles.sectionHead}>
-          <span style={v3Styles.sectionLabel}>§01</span>
-          <span style={v3Styles.sectionTitle}>
-            {visibleSelected.length === 0
+        <div className="at-section-head" style={styles.sectionHead}>
+          <span style={styles.sectionLabel}>§01</span>
+          <span style={styles.sectionTitle}>
+            {selectedItems.length === 0
               ? 'Nothing selected'
-              : visibleSelected.length === 1
-                ? visibleSelected[0].label
-                : `${visibleSelected.length} metrics, since 2020`}
+              : selectedItems.length === 1
+                ? selectedItems[0].label
+                : `${selectedItems.length} metrics, ${anchor.phrase}`}
           </span>
-          <span className="at-section-dek" style={v3Styles.sectionDek}>Hover any chart for monthly values.</span>
+          <span className="at-section-dek" style={styles.sectionDek}>Hover any chart for monthly values.</span>
         </div>
 
-        {visibleSelected.length === 0 ? (
+        {selectedItems.length === 0 ? (
           <div style={{
             background: PAPER, border: `1px solid rgba(27,42,78,.18)`,
             padding: '48px 32px', textAlign: 'center',
@@ -1411,51 +1251,633 @@ function V3({ data }) {
         ) : (
           <div className="at-cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 0,
             border: `1px solid rgba(27,42,78,.14)`, background: 'transparent' }}>
-            {visibleSelected.map((item, i) => {
+            {selectedItems.map((item, i) => {
               const col = i % 2;
               const row = Math.floor(i / 2);
-              const total = visibleSelected.length;
+              const total = selectedItems.length;
               const lastRow = Math.floor((total - 1) / 2);
               return (
                 <div key={item.id} className="at-card" style={{
                   borderRight: col < 1 ? `1px solid rgba(27,42,78,.14)` : 'none',
                   borderBottom: row < lastRow ? `1px solid rgba(27,42,78,.14)` : 'none',
                 }}>
-                  <ChartCard item={item} since={since} />
+                  <ChartCard item={item} anchorId={anchorId} displayMode={displayMode} />
                 </div>
               );
             })}
           </div>
         )}
 
-        {/* Heatmap */}
-        <div className="at-section-head" style={{ ...v3Styles.sectionHead, marginTop: 48 }}>
-          <span style={v3Styles.sectionLabel}>§02</span>
-          <span style={v3Styles.sectionTitle}>Year by year</span>
-          <span className="at-section-dek" style={v3Styles.sectionDek}>YoY % change in January, for the metrics you've selected.</span>
+        <div className="at-section-head" style={{ ...styles.sectionHead, marginTop: 48 }}>
+          <span style={styles.sectionLabel}>§02</span>
+          <span style={styles.sectionTitle}>Year by year</span>
+          <span className="at-section-dek" style={styles.sectionDek}>YoY % change each January, plus the two anchors, for the metrics you've selected.</span>
         </div>
         <div className="at-heatmap-scroll">
-          <Heatmap items={visibleSelected} />
+          <Heatmap items={selectedItems} />
+        </div>
+      </div>
+    </React.Fragment>
+  );
+}
+
+// ── State view: all metrics for one state, each vs. the US ──────────────────
+function fmtAnnual(value, units) {
+  if ((units || '').includes('%')) return Number(value).toFixed(1) + '%';
+  if ((units || '').includes('$')) return '$' + Math.round(Number(value)).toLocaleString();
+  return Number(value).toLocaleString();
+}
+
+function StateView({ data, code, setCode, anchorId, displayMode }) {
+  const idx = window.AFFORDABILITY_STATES;
+  const [status, setStatus] = useState('loading');
+
+  useEffect(() => {
+    let live = true;
+    setStatus('loading');
+    loadDataFile(`data/states/${code.toLowerCase()}.js`)
+      .then(() => { if (live) setStatus('ready'); })
+      .catch(() => { if (live) setStatus('error'); });
+    return () => { live = false; };
+  }, [code]);
+
+  const stateList = idx ? idx.states : [];
+  const pos = stateList.findIndex(s => s.code === code);
+  const step = (d) => {
+    const n = stateList[(pos + d + stateList.length) % stateList.length];
+    if (n) setCode(n.code);
+  };
+
+  const sd = (status === 'ready' && window.STATE_DATA) ? window.STATE_DATA[code] : null;
+
+  const picker = (
+    <div className="at-pad" style={{
+      background: PAPER, borderBottom: `1px solid rgba(27,42,78,.18)`,
+      padding: '16px 56px',
+      display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+    }}>
+      <span style={styles.controlLabel}>State</span>
+      <button onClick={() => step(-1)} style={{ ...styles.smallBtn, padding: '8px 10px', fontSize: 12 }}>←</button>
+      <select value={code} onChange={(e) => setCode(e.target.value)} style={styles.select}>
+        {stateList.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
+      </select>
+      <button onClick={() => step(1)} style={{ ...styles.smallBtn, padding: '8px 10px', fontSize: 12 }}>→</button>
+      <span style={{
+        fontFamily: 'Publico, Georgia, serif', fontSize: 13, fontStyle: 'italic', color: MUTE,
+      }}>Every chart shows this state against the US average (dashed).</span>
+    </div>
+  );
+
+  if (!idx) return null;
+  if (status !== 'ready' || !sd) {
+    return (
+      <React.Fragment>
+        {picker}
+        <div className="at-pad" style={{ padding: '48px 56px', fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE }}>
+          {status === 'error' ? `Could not load data for ${code}.` : 'Loading state data…'}
+        </div>
+      </React.Fragment>
+    );
+  }
+
+  const cards = idx.metrics
+    .filter(m => sd.metrics && sd.metrics[m.id])
+    .map(m => {
+      const sm = sd.metrics[m.id];
+      const coverageNote = sm.coverage && sm.coverage < 1
+        ? ` · covers ${(sm.coverage * 100).toFixed(0)}% of renters`
+        : '';
+      const item = {
+        id: `${code.toLowerCase()}_${m.id}`,
+        label: m.label,
+        eyebrow: sd.name,
+        subtitle: `${m.source_label}${coverageNote}`,
+        category: 'state',
+        units: m.units,
+        description: m.description,
+        color: m.color,
+        fred_id: sm.fred_id,
+        source_note: m.source_label,
+        rebase: m.rebase,
+        invert_color: m.invert_color,
+        latest_value: sm.latest_value,
+        latest_date: sm.latest_date,
+        data: sm.data,
+      };
+      const overlay = m.national_id && data[m.national_id] ? data[m.national_id] : null;
+      return { item, overlay, factLabel: `${sd.name} — ${m.label}` };
+    });
+
+  const annualTiles = (idx.annual || []).filter(a => sd.annual && sd.annual[a.id] != null);
+
+  return (
+    <React.Fragment>
+      {picker}
+      <div className="at-pad" style={{ padding: '36px 56px 56px' }}>
+        <div className="at-section-head" style={styles.sectionHead}>
+          <span style={styles.sectionLabel}>§01</span>
+          <span style={styles.sectionTitle}>{sd.name}</span>
+          <span className="at-section-dek" style={styles.sectionDek}>
+            No state-level CPI exists — these are the price and income series that do.
+          </span>
         </div>
 
-        {/* Footer */}
+        <div className="at-cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 0,
+          border: `1px solid rgba(27,42,78,.14)` }}>
+          {cards.map(({ item, overlay, factLabel }, i) => {
+            const col = i % 2;
+            const row = Math.floor(i / 2);
+            const lastRow = Math.floor((cards.length - 1) / 2);
+            return (
+              <div key={item.id} className="at-card" style={{
+                borderRight: col < 1 ? `1px solid rgba(27,42,78,.14)` : 'none',
+                borderBottom: row < lastRow ? `1px solid rgba(27,42,78,.14)` : 'none',
+              }}>
+                <ChartCard item={item} anchorId={anchorId} displayMode={displayMode}
+                           overlayItem={overlay} factLabel={factLabel} />
+              </div>
+            );
+          })}
+        </div>
+
+        {annualTiles.length > 0 && (
+          <React.Fragment>
+            <div className="at-section-head" style={{ ...styles.sectionHead, marginTop: 48 }}>
+              <span style={styles.sectionLabel}>§02</span>
+              <span style={styles.sectionTitle}>The annual picture</span>
+              <span className="at-section-dek" style={styles.sectionDek}>
+                Costs and debt burdens published once a year — context, not live tracking.
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
+              {annualTiles.map(a => (
+                <div key={a.id} style={{
+                  background: PAPER, border: `1px solid rgba(27,42,78,.16)`,
+                  borderTop: `2px solid ${WARM_RED}`, padding: '16px 18px',
+                }}>
+                  <div style={{
+                    fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+                    fontSize: 10, letterSpacing: '.14em', textTransform: 'uppercase',
+                    fontWeight: 700, color: MUTE, marginBottom: 8,
+                  }}>{a.label}</div>
+                  <div style={{ fontFamily: 'Publico, Georgia, serif', fontSize: 30, fontWeight: 500 }}>
+                    {fmtAnnual(sd.annual[a.id], a.units)}
+                  </div>
+                  <div style={{ fontSize: 11, color: MUTE, marginTop: 6, lineHeight: 1.45 }}>
+                    {a.units} · {a.year}<br/>
+                    <a href={a.source_url} target="_blank" rel="noopener noreferrer"
+                       style={{ color: MUTE, textDecoration: 'underline', textUnderlineOffset: 2 }}>{a.source}</a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </React.Fragment>
+        )}
+      </div>
+    </React.Fragment>
+  );
+}
+
+// ── Compare view: one metric, all states ────────────────────────────────────
+function Sparkline({ data, color, w = 130, h = 34 }) {
+  const pts = toPoints(data, w, h);
+  if (!pts.length) return <div style={{ height: h }} />;
+  return (
+    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+      <path d={linePath(pts)} fill="none" stroke={color} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
+function CompareChart({ metric, seriesList, anchorId, displayMode }) {
+  const canvasRef = useRef(null);
+  const chartRef = useRef(null);
+  const [chartReady, setChartReady] = useState(!!window.Chart);
+
+  useEffect(() => { loadChartJs().then(() => setChartReady(true)); }, []);
+
+  const asPct = metric.rebase || displayMode === 'pct';
+
+  useEffect(() => {
+    if (!chartReady || !canvasRef.current) return;
+    if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+    const ctx = canvasRef.current.getContext('2d');
+
+    const datasets = seriesList.map(s => {
+      const since = anchorDate(anchorId, s.data);
+      let vis = sliceFrom(s.data, since);
+      if (asPct && vis.length) {
+        const v0 = vis[0].value;
+        vis = vis.map(d => ({ date: d.date, value: v0 ? (d.value / v0 - 1) * 100 : 0 }));
+      }
+      return {
+        label: s.label,
+        data: vis.map(d => ({ x: d.date, y: d.value })),
+        borderColor: s.color,
+        borderWidth: s.dashed ? 1.6 : 2,
+        borderDash: s.dashed ? [5, 4] : undefined,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        tension: 0.32,
+        fill: false,
+      };
+    });
+
+    const displayUnits = asPct ? '%' : metric.units;
+
+    chartRef.current = new window.Chart(ctx, {
+      type: 'line',
+      data: { datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 350, easing: 'easeOutQuart' },
+        interaction: { intersect: false, mode: 'index' },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: NAVY, titleColor: '#9BA8C2', bodyColor: PAPER,
+            borderColor: 'rgba(244,236,216,.15)', borderWidth: 1, padding: 11,
+            cornerRadius: 4, displayColors: true, boxWidth: 8, boxHeight: 8,
+            titleFont: { size: 10, family: 'Inter Tight, system-ui', weight: '600' },
+            bodyFont:  { size: 12, family: 'Inter Tight, system-ui', weight: '600' },
+            callbacks: {
+              title: (c) => fmtDate(c[0].parsed.x, { year: 'numeric', month: 'long' }),
+              label: (c) => ` ${c.dataset.label}: ${fmtVal(c.parsed.y, displayUnits)}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            type: 'time',
+            time: { unit: anchorId === '1y' ? 'month' : 'year' },
+            grid: { display: false }, border: { display: false },
+            ticks: { color: MUTE, font: { size: 10, family: 'Inter Tight, system-ui' }, maxTicksLimit: 7 },
+          },
+          y: {
+            position: 'right',
+            grid: { color: 'rgba(27,42,78,.08)', drawTicks: false },
+            border: { display: false },
+            ticks: {
+              color: MUTE, font: { size: 10, family: 'Inter Tight, system-ui' },
+              callback: (v) => fmtVal(v, displayUnits),
+            },
+          },
+        },
+      },
+    });
+
+    return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+  }, [chartReady, metric, seriesList, anchorId, displayMode]);
+
+  return (
+    <div style={{ height: 340, position: 'relative' }}>
+      <canvas ref={canvasRef} />
+    </div>
+  );
+}
+
+function CompareView({ data, metricId, setMetricId, homeState, anchorId, displayMode }) {
+  const idx = window.AFFORDABILITY_STATES;
+  const [status, setStatus] = useState('loading');
+  const [pinned, setPinned] = useState(() => [homeState].filter(Boolean));
+  const [sortBy, setSortBy] = useState('az');
+
+  useEffect(() => {
+    let live = true;
+    setStatus('loading');
+    loadDataFile(`data/state_metrics/${metricId}.js`)
+      .then(() => { if (live) setStatus('ready'); })
+      .catch(() => { if (live) setStatus('error'); });
+    return () => { live = false; };
+  }, [metricId]);
+
+  if (!idx) return null;
+  const metric = idx.metrics.find(m => m.id === metricId) || idx.metrics[0];
+  const md = (status === 'ready' && window.STATE_METRIC) ? window.STATE_METRIC[metricId] : null;
+
+  const names = {};
+  idx.states.forEach(s => { names[s.code] = s.name; });
+
+  const togglePin = (code) => {
+    setPinned(prev => {
+      if (prev.includes(code)) return prev.filter(c => c !== code);
+      const next = [...prev, code];
+      return next.length > PIN_COLORS.length ? next.slice(next.length - PIN_COLORS.length) : next;
+    });
+  };
+
+  const anchorD = anchorDate(anchorId, null);
+  const asPct = metric.rebase || displayMode === 'pct';
+
+  let rows = [];
+  if (md) {
+    rows = Object.keys(md.states).map(code => {
+      const s = md.states[code];
+      return {
+        code,
+        name: names[code] || code,
+        latest: s.latest_value,
+        change: pctChange(s.data, anchorId === 'max' ? s.data[0].date : anchorD),
+        data: s.data,
+      };
+    });
+    rows.sort(sortBy === 'az'
+      ? (a, b) => a.name.localeCompare(b.name)
+      : (a, b) => (b.change ?? -Infinity) - (a.change ?? -Infinity));
+  }
+
+  // Overlay chart series: US national (dashed) + pinned states
+  const seriesList = [];
+  const natItem = metric.national_id && data[metric.national_id];
+  if (natItem) seriesList.push({ label: 'US', color: hexToRgba(NAVY, 0.75), dashed: true, data: natItem.data });
+  pinned.forEach((code, i) => {
+    const s = md && md.states[code];
+    if (s) seriesList.push({ label: names[code] || code, color: PIN_COLORS[i % PIN_COLORS.length], data: s.data });
+  });
+
+  const changeColorFor = (v) => v == null ? MUTE : (metric.invert_color ? v < 0 : v >= 0) ? WARM_RED : '#2E7D5B';
+
+  return (
+    <React.Fragment>
+      {/* Metric picker */}
+      <div className="at-pad" style={{
+        background: PAPER, borderBottom: `1px solid rgba(27,42,78,.18)`,
+        padding: '16px 56px',
+        display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+      }}>
+        <span style={styles.controlLabel}>Metric</span>
+        {idx.metrics.map(m => {
+          const on = m.id === metric.id;
+          return (
+            <button key={m.id} onClick={() => setMetricId(m.id)} style={{
+              fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+              fontSize: 13, fontWeight: on ? 700 : 600,
+              padding: '8px 15px',
+              border: `1.5px solid ${on ? NAVY : 'rgba(27,42,78,.22)'}`,
+              background: on ? NAVY : 'transparent',
+              color: on ? PAPER : INK,
+              cursor: 'pointer', borderRadius: 100,
+            }}>{m.label}</button>
+          );
+        })}
+      </div>
+
+      <div className="at-pad" style={{ padding: '36px 56px 56px' }}>
+        {status !== 'ready' || !md ? (
+          <div style={{ padding: '48px 0', fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE }}>
+            {status === 'error' ? 'Could not load this metric.' : 'Loading state data…'}
+          </div>
+        ) : (
+          <React.Fragment>
+            <div className="at-section-head" style={styles.sectionHead}>
+              <span style={styles.sectionLabel}>§01</span>
+              <span style={styles.sectionTitle}>{metric.label} — pick states to overlay</span>
+              <span className="at-section-dek" style={styles.sectionDek}>{metric.source_label} · {metric.frequency}</span>
+            </div>
+
+            {/* Pinned chips + add control */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+              {natItem && (
+                <span style={{
+                  fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif', fontSize: 12, fontWeight: 700,
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  padding: '6px 12px', border: `1px dashed ${hexToRgba(NAVY, 0.5)}`, color: NAVY, borderRadius: 100,
+                }}>
+                  <span style={{ width: 16, borderTop: `2px dashed ${hexToRgba(NAVY, 0.75)}` }} /> US average
+                </span>
+              )}
+              {pinned.map((code, i) => (
+                <button key={code} onClick={() => togglePin(code)} style={{
+                  fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif', fontSize: 12, fontWeight: 700,
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  padding: '6px 12px', borderRadius: 100, cursor: 'pointer',
+                  border: `1.5px solid ${PIN_COLORS[i % PIN_COLORS.length]}`,
+                  background: hexToRgba(PIN_COLORS[i % PIN_COLORS.length], 0.09), color: INK,
+                }} title="Remove from chart">
+                  <span style={{ width: 10, height: 10, borderRadius: 5, background: PIN_COLORS[i % PIN_COLORS.length] }} />
+                  {names[code] || code} ✕
+                </button>
+              ))}
+              <select
+                value=""
+                onChange={(e) => { if (e.target.value) togglePin(e.target.value); }}
+                style={{ ...styles.select, padding: '7px 10px', fontSize: 13 }}
+              >
+                <option value="">+ Add a state…</option>
+                {rows.filter(r => !pinned.includes(r.code)).map(r => (
+                  <option key={r.code} value={r.code}>{r.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ background: PAPER, border: `1px solid rgba(27,42,78,.16)`, padding: '18px 20px 12px' }}>
+              {seriesList.length === 0 ? (
+                <div style={{ padding: '60px 0', textAlign: 'center', fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE }}>
+                  Add a state to draw the comparison.
+                </div>
+              ) : (
+                <CompareChart metric={metric} seriesList={seriesList} anchorId={anchorId} displayMode={displayMode} />
+              )}
+            </div>
+
+            <div className="at-section-head" style={{ ...styles.sectionHead, marginTop: 48 }}>
+              <span style={styles.sectionLabel}>§02</span>
+              <span style={styles.sectionTitle}>All states</span>
+              <span className="at-section-dek" style={styles.sectionDek}>Click any state to add it to the chart above.</span>
+              <span style={{ display: 'flex', gap: 6, marginLeft: 16 }}>
+                <button onClick={() => setSortBy('az')} style={styles.modeBtn(sortBy === 'az')}>A–Z</button>
+                <button onClick={() => setSortBy('change')} style={styles.modeBtn(sortBy === 'change')}>Biggest change</button>
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 10 }}>
+              {rows.map(r => {
+                const isPinned = pinned.includes(r.code);
+                const pinColor = isPinned ? PIN_COLORS[pinned.indexOf(r.code) % PIN_COLORS.length] : metric.color;
+                const spark = sliceFrom(r.data, anchorDate(anchorId === 'max' ? '2000' : anchorId, r.data));
+                return (
+                  <button key={r.code} onClick={() => togglePin(r.code)} style={{
+                    textAlign: 'left', cursor: 'pointer',
+                    background: PAPER,
+                    border: isPinned ? `2px solid ${pinColor}` : '1px solid rgba(27,42,78,.16)',
+                    padding: '12px 13px 10px',
+                    display: 'flex', flexDirection: 'column', gap: 7,
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
+                      <span style={{
+                        fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+                        fontSize: 13, fontWeight: 800, color: INK, letterSpacing: '.02em',
+                      }}>{r.code}</span>
+                      <span style={{
+                        fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+                        fontSize: 11, fontWeight: 700, color: changeColorFor(r.change),
+                      }}>{r.change == null ? '—' : (r.change >= 0 ? '+' : '−') + Math.abs(r.change).toFixed(1) + '%'}</span>
+                    </div>
+                    <Sparkline data={spark} color={pinColor} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
+                      <span style={{
+                        fontFamily: 'Publico, Georgia, serif', fontSize: 15, fontWeight: 600, color: INK,
+                      }}>{r.latest == null ? '—' : fmtVal(r.latest, metric.units)}</span>
+                      <span style={{ fontSize: 9.5, color: SOFT, textTransform: 'uppercase', letterSpacing: '.05em',
+                        fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif', fontWeight: 600,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{
+              marginTop: 14, fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic',
+              fontSize: 12.5, color: MUTE,
+            }}>
+              % change is measured {anchorById(anchorId).phrase}.
+              {metric.id === 'rent' && ' State rents aggregate Zillow county data with renter-household weights; states where coverage falls below half of renter households are omitted.'}
+            </div>
+          </React.Fragment>
+        )}
+      </div>
+    </React.Fragment>
+  );
+}
+
+// ── Shell ────────────────────────────────────────────────────────────────────
+function parseHash() {
+  const out = {};
+  const h = (window.location.hash || '').replace(/^#/, '');
+  h.split('&').forEach(kv => {
+    const [k, v] = kv.split('=');
+    if (k && v) out[decodeURIComponent(k)] = decodeURIComponent(v);
+  });
+  return out;
+}
+
+function AppMain({ data }) {
+  const idx = window.AFFORDABILITY_STATES;
+  const hash = useMemo(parseHash, []);
+  const validState = (c) => idx && idx.states.some(s => s.code === c);
+  const validMetric = (m) => idx && idx.metrics.some(x => x.id === m);
+
+  const [view, setView] = useState(
+    ['national', 'state', 'compare'].includes(hash.view) && (hash.view === 'national' || idx) ? hash.view : 'national');
+  const [anchorId, setAnchorId] = useState(ANCHORS.some(a => a.id === hash.anchor) ? hash.anchor : '2025');
+  const [displayMode, setDisplayMode] = useState(hash.mode === 'pct' ? 'pct' : 'level');
+  const [stateCode, setStateCode] = useState(validState(hash.state) ? hash.state : 'CA');
+  const [metricId, setMetricId] = useState(validMetric(hash.metric) ? hash.metric : (idx && idx.metrics[0] ? idx.metrics[0].id : 'unemployment'));
+
+  // Deep links: a campaigner can send a colleague straight to their state.
+  useEffect(() => {
+    const parts = [`view=${view}`, `anchor=${anchorId}`];
+    if (displayMode === 'pct') parts.push('mode=pct');
+    if (view === 'state') parts.push(`state=${stateCode}`);
+    if (view === 'compare') { parts.push(`metric=${metricId}`); }
+    window.history.replaceState(null, '', '#' + parts.join('&'));
+  }, [view, anchorId, displayMode, stateCode, metricId]);
+
+  const lastUpdated = (() => {
+    const stamps = Object.values(data).map(d => d.last_updated).filter(Boolean).sort();
+    return stamps.length ? stamps[stamps.length - 1] : null;
+  })();
+
+  const VIEWS = [
+    { id: 'national', label: 'National' },
+    ...(idx ? [
+      { id: 'state',   label: 'My State' },
+      { id: 'compare', label: 'Compare States' },
+    ] : []),
+  ];
+
+  return (
+    <div style={styles.root}>
+      {/* Top bar */}
+      <div className="at-pad" style={styles.topbar}>
+        <span>Economic Security Project</span>
+        <a href="about.html" style={{
+          color: PAPER, textDecoration: 'none',
+          borderBottom: '1px dotted rgba(244,236,216,.5)', paddingBottom: 1,
+        }}>About the data →</a>
+      </div>
+
+      {/* Hero */}
+      <header className="at-pad at-hero" style={styles.hero}>
+        <div style={styles.kicker}>The Affordability Tracker · {(new Date()).getFullYear()}</div>
+        <h1 className="at-h1" style={styles.h1}>What's gotten<br/>more expensive.</h1>
+        <p className="at-dek" style={styles.dek}>
+          A long, careful look at the federal price data — national and state by state.
+          Built for the people who write about it, organize around it, and have to live inside it.
+        </p>
+        {lastUpdated && (
+          <div style={{
+            marginTop: 22,
+            fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+            fontSize: 12, letterSpacing: '.18em', textTransform: 'uppercase',
+            color: 'rgba(244,238,225,.6)', fontWeight: 600,
+          }}>
+            Last updated · {new Date(lastUpdated + 'T12:00:00').toLocaleDateString('en-US', {
+              year: 'numeric', month: 'long', day: 'numeric',
+            })}
+          </div>
+        )}
+
+        {/* View tabs */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 38 }}>
+          {VIEWS.map(v => (
+            <button key={v.id} onClick={() => setView(v.id)} style={styles.viewTab(view === v.id)}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      {/* Global controls: anchor + $/% */}
+      <div className="at-pad at-controls" style={styles.controls}>
+        <span style={styles.controlLabel}>Measure from</span>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {ANCHORS.map(a => (
+            <button key={a.id} onClick={() => setAnchorId(a.id)} style={styles.anchorBtn(a.id === anchorId)}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={styles.controlLabel}>View</span>
+          <span style={{ display: 'flex' }}>
+            <button onClick={() => setDisplayMode('level')} style={styles.modeBtn(displayMode === 'level')}>$ levels</button>
+            <button onClick={() => setDisplayMode('pct')} style={styles.modeBtn(displayMode === 'pct')}>% change</button>
+          </span>
+        </span>
+      </div>
+
+      {view === 'national' && <NationalView data={data} anchorId={anchorId} displayMode={displayMode} />}
+      {view === 'state'    && <StateView data={data} code={stateCode} setCode={setStateCode}
+                                         anchorId={anchorId} displayMode={displayMode} />}
+      {view === 'compare'  && <CompareView data={data} metricId={metricId} setMetricId={setMetricId}
+                                           homeState={stateCode} anchorId={anchorId} displayMode={displayMode} />}
+
+      {/* Footer */}
+      <div className="at-pad" style={{ padding: '0 56px 48px' }}>
         <div style={{
-          marginTop: 48, paddingTop: 22, borderTop: `1px solid rgba(27,42,78,.2)`,
+          paddingTop: 22, borderTop: `1px solid rgba(27,42,78,.2)`,
           fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
           fontSize: 11, color: MUTE, letterSpacing: '.08em',
-          textTransform: 'uppercase', textAlign: 'right',
+          textTransform: 'uppercase',
+          display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
         }}>
-          Data: FRED · BLS · Freddie Mac · EIA<br/>
-          economicsecurityproject.org / affordability
+          <a href="about.html" style={{ color: MUTE, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+            About the data: sources & methods
+          </a>
+          <span style={{ textAlign: 'right' }}>
+            Data: FRED · BLS · Census · FHFA · Zillow · Freddie Mac · EIA<br/>
+            economicsecurityproject.org / affordability
+          </span>
         </div>
       </div>
     </div>
   );
 }
 
-window.V3 = V3;
+window.AppMain = AppMain;
 })();
-
 </script>
 
 <script type="text/babel" data-presets="react">
@@ -1464,11 +1886,11 @@ window.V3 = V3;
 
   function App() {
     const data = window.AFFORDABILITY_DATA;
-    const [ready, setReady] = useState(!!window.V3);
+    const [ready, setReady] = useState(!!window.AppMain);
     useEffect(() => {
       if (ready) return;
       const t = setInterval(() => {
-        if (window.V3) { setReady(true); clearInterval(t); }
+        if (window.AppMain) { setReady(true); clearInterval(t); }
       }, 80);
       return () => clearInterval(t);
     }, [ready]);
@@ -1476,9 +1898,10 @@ window.V3 = V3;
     if (!data) return <div style={{ color: '#F4ECD8', padding: 40, fontFamily: 'system-ui' }}>No data loaded.</div>;
     if (!ready) return <div style={{ color: '#F4ECD8', padding: 40, fontFamily: 'system-ui' }}>Loading…</div>;
 
+    const Main = window.AppMain;
     return (
       <div id="stage">
-        <V3 data={data} />
+        <Main data={data} />
       </div>
     );
   }

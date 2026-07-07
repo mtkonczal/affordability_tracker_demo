@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>About the Data — Affordability Tracker — Economic Security Project</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Inter+Tight:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --navy: #1B2A4E;
+    --red: #E04E39;
+    --beige: #F4ECD8;
+    --paper: #FBF7EE;
+    --ink: #0E1320;
+    --mute: #6B6E78;
+    --soft: #9A9CA3;
+    --rule: rgba(27,42,78,.18);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Public Sans', system-ui, sans-serif;
+    background: #0E1320; color: var(--ink);
+  }
+  .stage { background: var(--beige); min-height: 100vh; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+  .serif { font-family: 'Source Serif 4', Georgia, serif; }
+  .display { font-family: 'Inter Tight', system-ui, sans-serif; }
+
+  .topbar {
+    background: var(--navy); color: var(--paper);
+    padding: 16px 56px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-size: 11px; letter-spacing: .18em; text-transform: uppercase; font-weight: 600;
+  }
+  .topbar a { color: var(--paper); text-decoration: none; border-bottom: 1px dotted rgba(244,236,216,.5); padding-bottom: 1px; }
+
+  header.hero {
+    background: var(--navy); color: var(--paper);
+    padding: 56px 56px 48px;
+  }
+  .kicker {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 26px; font-weight: 600; color: var(--red); margin-bottom: 16px;
+  }
+  h1 {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 52px; line-height: 1.06; letter-spacing: -.02em; font-weight: 500;
+    max-width: 900px; margin-bottom: 22px;
+  }
+  .dek {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 19px; line-height: 1.55; color: #E8C9A8; max-width: 760px; font-style: italic;
+  }
+
+  main { padding: 44px 56px 64px; max-width: 1180px; }
+
+  h2 {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 27px; font-weight: 500; margin: 44px 0 6px;
+    padding-bottom: 8px; border-bottom: 1px solid rgba(27,42,78,.25);
+    display: flex; align-items: baseline; gap: 14px;
+  }
+  h2 .sec {
+    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-size: 12px; letter-spacing: .22em; text-transform: uppercase;
+    font-weight: 700; color: var(--red);
+  }
+  h2:first-of-type { margin-top: 0; }
+  p.lead { margin: 14px 0 18px; font-size: 15.5px; line-height: 1.65; max-width: 820px; }
+  p.note { margin: 12px 0; font-size: 13.5px; line-height: 1.6; color: var(--mute); max-width: 820px; }
+
+  .table-wrap { overflow-x: auto; margin: 18px 0 8px; }
+  table {
+    width: 100%; border-collapse: collapse; background: var(--paper);
+    border: 1px solid var(--rule); font-size: 13.5px;
+  }
+  th {
+    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+    font-weight: 700; color: var(--mute); text-align: left;
+    padding: 10px 14px; border-bottom: 1px solid var(--rule);
+    background: rgba(27,42,78,.045);
+  }
+  td { padding: 11px 14px; border-bottom: 1px solid rgba(27,42,78,.09); vertical-align: top; line-height: 1.5; }
+  tr:last-child td { border-bottom: none; }
+  td b { font-weight: 600; }
+  td a { color: var(--navy); }
+  .freq {
+    font-family: 'Inter Tight', system-ui, sans-serif;
+    display: inline-block; font-size: 10.5px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+  }
+  .freq.m { background: #E7F4EE; color: #2E7D5B; }
+  .freq.w { background: #E7F4EE; color: #2E7D5B; }
+  .freq.q { background: #FBF2DC; color: #B5820A; }
+  .freq.a { background: #FBE7E7; color: #B33636; }
+
+  .method {
+    background: var(--paper); border: 1px solid var(--rule); border-left: 3px solid var(--red);
+    padding: 16px 20px; margin: 14px 0; max-width: 860px;
+  }
+  .method h3 {
+    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--navy); margin-bottom: 6px;
+  }
+  .method p { font-size: 13.5px; line-height: 1.6; color: var(--ink); }
+  .method p + p { margin-top: 8px; }
+
+  footer {
+    padding: 22px 56px 48px;
+    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-size: 11px; color: var(--mute); letter-spacing: .08em; text-transform: uppercase;
+    border-top: 1px solid rgba(27,42,78,.2); margin: 0 56px;
+    display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding-left: 0; padding-right: 0;
+  }
+  .footer-wrap { padding: 0 56px 48px; }
+  footer a { color: var(--mute); }
+
+  @media (max-width: 720px) {
+    .topbar, header.hero, main, .footer-wrap { padding-left: 20px; padding-right: 20px; }
+    footer { margin: 0; }
+    h1 { font-size: 36px; }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <div class="topbar">
+    <span>Economic Security Project</span>
+    <a href="index.html">← Back to the tracker</a>
+  </div>
+
+  <header class="hero">
+    <div class="kicker">The Affordability Tracker</div>
+    <h1>About the data.</h1>
+    <p class="dek">
+      Every number on the tracker comes from a public, verifiable source, refreshed
+      automatically, with the series identifier one click away. This page says exactly
+      where each figure comes from, how often it updates, and what it can and cannot claim.
+    </p>
+  </header>
+
+  <main>
+    <h2><span class="sec">§01</span> How the tracker updates</h2>
+    <p class="lead">
+      The time-series data refreshes automatically on the <b>1st of each month</b>,
+      with manual refreshes as needed after major federal releases. If any source fails
+      to fetch, the site keeps serving the last good data rather than a partial update. The annual state indicators (childcare, health
+      premiums, debt burdens) are updated once a year when their sources publish.
+      Every chart offers a CSV of the exact series shown and a shareable PNG.
+    </p>
+
+    <h2><span class="sec">§02</span> National series</h2>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Series</th><th>Source</th><th>Updates</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Groceries, electricity, rent (CPI), cars, car insurance, health insurance, childcare, inflation</b></td>
+          <td>BLS Consumer Price Index, via FRED and the BLS public API</td>
+          <td><span class="freq m">Monthly</span></td>
+          <td>Seasonally adjusted where published. Index series display as cumulative % change, never raw index points. Each card links to its FRED series ID.</td>
+        </tr>
+        <tr>
+          <td><b>Eggs, ground beef, chicken, milk, bread, bananas, potatoes</b></td>
+          <td>BLS Average Price data (US city average)</td>
+          <td><span class="freq m">Monthly</span></td>
+          <td>Actual retail dollar prices, not indexes.</td>
+        </tr>
+        <tr>
+          <td><b>Gasoline</b></td>
+          <td>US Energy Information Administration, via FRED</td>
+          <td><span class="freq w">Weekly</span></td>
+          <td>Regular unleaded, US average pump price.</td>
+        </tr>
+        <tr>
+          <td><b>Rent (market)</b></td>
+          <td>Zillow Observed Rent Index (ZORI)</td>
+          <td><span class="freq m">Monthly</span></td>
+          <td>Typical <i>asking</i> rent for a new lease, in dollars — a different concept from CPI rent, which tracks all tenants including long-standing leases. Smoothed, seasonally adjusted.</td>
+        </tr>
+        <tr>
+          <td><b>Median home price</b></td>
+          <td>Census Bureau / HUD, via FRED</td>
+          <td><span class="freq q">Quarterly</span></td>
+          <td>Median sales price of houses sold.</td>
+        </tr>
+        <tr>
+          <td><b>30-year mortgage rate</b></td>
+          <td>Freddie Mac Primary Mortgage Market Survey, via FRED</td>
+          <td><span class="freq w">Weekly</span></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td><b>Wages, unemployment, job openings, quits, unemployment duration</b></td>
+          <td>BLS (CES, CPS, JOLTS), via FRED</td>
+          <td><span class="freq m">Monthly</span></td>
+          <td>Real hourly earnings are derived: nominal earnings deflated by CPI-U, expressed in the latest month's dollars.</td>
+        </tr>
+        <tr>
+          <td><b>Credit card, student loan &amp; auto debt; delinquency rates</b></td>
+          <td>Federal Reserve (G.19 release; bank call reports), via FRED</td>
+          <td><span class="freq m">Monthly</span> <span class="freq q">Quarterly</span></td>
+          <td>Balances owned and securitized; delinquency is 30+ days at all commercial banks.</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h2><span class="sec">§03</span> State series</h2>
+    <p class="lead">
+      Every state series covers all 50 states plus DC unless noted. The state view draws
+      each series against the US average; the compare view puts any set of states on one chart.
+    </p>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Series</th><th>Source</th><th>Updates</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Unemployment rate</b></td>
+          <td>BLS Local Area Unemployment Statistics, via FRED</td>
+          <td><span class="freq m">Monthly</span></td>
+          <td>Seasonally adjusted.</td>
+        </tr>
+        <tr>
+          <td><b>Hourly wages</b></td>
+          <td>BLS state Current Employment Statistics, via FRED</td>
+          <td><span class="freq m">Monthly</span></td>
+          <td>Average hourly earnings, all private employees. Not seasonally adjusted; series begin in 2007.</td>
+        </tr>
+        <tr>
+          <td><b>Home prices</b></td>
+          <td>FHFA All-Transactions House Price Index, via FRED</td>
+          <td><span class="freq q">Quarterly</span></td>
+          <td>An index (displayed as % change), not a dollar price — dollar-level state sale prices require proprietary data.</td>
+        </tr>
+        <tr>
+          <td><b>Median household income</b></td>
+          <td>Census Bureau (CPS ASEC), via FRED</td>
+          <td><span class="freq a">Annual</span></td>
+          <td>Real (inflation-adjusted) dollars.</td>
+        </tr>
+        <tr>
+          <td><b>Rent (market)</b></td>
+          <td>Zillow ZORI, county data aggregated by ESP</td>
+          <td><span class="freq m">Monthly</span></td>
+          <td>See methods below — Zillow doesn't publish state ZORI, so we aggregate its county index with renter-household weights. States where covered counties hold under half of renter households are omitted; each state card shows its coverage.</td>
+        </tr>
+        <tr>
+          <td><b>Electricity bills</b></td>
+          <td>EIA Form 861M</td>
+          <td><span class="freq m">Monthly</span></td>
+          <td>Average monthly residential bill (revenue ÷ customers). Appears once the tracker's EIA API key is configured; recent months are preliminary and revised.</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h2><span class="sec">§04</span> Annual state indicators</h2>
+    <p class="lead">
+      Some of the costs that matter most are only published once a year. These appear as
+      stat tiles on each state's page — context for the live series, not live tracking.
+    </p>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Indicator</th><th>Source &amp; vintage</th><th>Definition</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>ACA benchmark premium</b></td>
+          <td><a href="https://www.kff.org/affordable-care-act/state-indicator/marketplace-average-benchmark-premiums/" target="_blank" rel="noopener">KFF</a>, plan year 2026</td>
+          <td>Monthly unsubsidized premium for the second-lowest-cost silver plan, 40-year-old, county-weighted by plan selections.</td>
+        </tr>
+        <tr>
+          <td><b>Infant child care, center-based</b></td>
+          <td><a href="https://info.childcareaware.org/price-and-supply-2025" target="_blank" rel="noopener">Child Care Aware of America</a>, 2025</td>
+          <td>Annual price of full-time center-based infant care. CO, DC, NM and SC did not report a 2025 price. Seven states (AL, FL, MT, PA, TX, WV, WY) carry a footnote flag in CCAoA's published tables — check the report before quoting those states specifically.</td>
+        </tr>
+        <tr>
+          <td><b>Household debt per capita</b></td>
+          <td><a href="https://www.newyorkfed.org/microeconomics/databank.html" target="_blank" rel="noopener">NY Fed</a> Consumer Credit Panel / Equifax, Q4 2025</td>
+          <td>Total debt balance per person <i>with a credit file</i> (ages 18+), not per resident.</td>
+        </tr>
+        <tr>
+          <td><b>Credit card delinquency (90+)</b></td>
+          <td>NY Fed Consumer Credit Panel / Equifax, Q4 2025</td>
+          <td>Percent of credit card <i>balance</i> 90+ days delinquent — a stricter measure than the 30-day national bank series.</td>
+        </tr>
+        <tr>
+          <td><b>Medical debt in collections</b></td>
+          <td><a href="https://apps.urban.org/features/debt-interactive-map/" target="_blank" rel="noopener">Urban Institute, Debt in America</a>, Aug 2025 panel</td>
+          <td>Share of people with a credit record who have medical debt in collections. Seven states that restrict medical-debt credit reporting (CA, CO, IL, NY, RI, VT, WA) have no comparable 2025 value and show no tile — an artifact of reporting rules, not zero medical debt.</td>
+        </tr>
+        <tr>
+          <td><b>Any debt in collections</b></td>
+          <td>Urban Institute, Debt in America, Aug 2025 panel</td>
+          <td>Share of people with a credit record with any debt in collections.</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h2><span class="sec">§05</span> Methods, honestly stated</h2>
+
+    <div class="method">
+      <h3>The three anchors</h3>
+      <p>The tracker measures change from three moments: <b>January 2025</b> (the current
+      administration), <b>December 2019</b> (just before the pandemic), and <b>2000</b>
+      (a generation). We use December 2019 rather than early 2020 deliberately: anchoring
+      at 2020 bakes the COVID crash into the baseline — gas prices collapsed in April
+      2020, for instance — and produces comparisons that don't survive scrutiny.</p>
+    </div>
+
+    <div class="method">
+      <h3>Indexes display as percent change</h3>
+      <p>CPI and house-price indexes have arbitrary base years (a CPI of 320 means nothing
+      by itself), so the tracker never shows raw index points. Index series are rebased to
+      cumulative percent change from the start of whatever window you've selected. Dollar
+      series ($ per dozen, $ per month) display in dollars, with a global toggle to view
+      everything as percent change for comparison.</p>
+    </div>
+
+    <div class="method">
+      <h3>No state CPI exists</h3>
+      <p>The BLS does not publish state-level consumer price indexes — anyone showing you
+      "grocery inflation in Ohio" is estimating with proprietary data. This tracker shows
+      only what genuinely exists at the state level: unemployment, wages, home prices,
+      incomes, market rents, and electricity bills, plus the annual indicators above.
+      Grocery and insurance prices are national.</p>
+    </div>
+
+    <div class="method">
+      <h3>How state rents are built</h3>
+      <p>Zillow publishes its Observed Rent Index for counties but not states. We aggregate
+      county ZORI to states using fixed county renter-household weights (Census ACS
+      2019–2023), the appropriate universe for a rental price measure. States where the
+      covered counties hold less than half of the state's renter households are omitted
+      rather than shown thin, and every state's coverage share is displayed on its card.
+      ZORI measures <i>asking</i> rent on new leases — it moves earlier and faster than
+      CPI rent, which averages over all tenants.</p>
+    </div>
+
+    <div class="method">
+      <h3>Real wages</h3>
+      <p>Real hourly earnings deflate average hourly earnings (BLS CES) by CPI-U (all
+      items, seasonally adjusted) and express the result in the most recent month's
+      dollars, so the latest point matches the nominal series and history shows what past
+      paychecks would buy today. This is the standard construction; sources are printed on
+      the card.</p>
+    </div>
+
+    <div class="method">
+      <h3>Mixing seasonally adjusted and unadjusted series</h3>
+      <p>National CPI series are seasonally adjusted where the BLS publishes them that
+      way. State wage series (CES) and the FHFA house price index are not seasonally
+      adjusted — comparisons across states at the same date are clean, but month-to-month
+      wiggles within a state partly reflect seasonality. Year-over-year and anchor-based
+      changes, which the tracker leads with, are robust to this.</p>
+    </div>
+
+    <p class="note">
+      Corrections and methods questions: the underlying pipeline is a single R script that
+      declares every series identifier explicitly; every card's CSV download embeds its
+      source URL. If a number here can't be traced to a public series in two clicks,
+      that's a bug — tell us.
+    </p>
+  </main>
+
+  <div class="footer-wrap">
+    <footer>
+      <span><a href="index.html">← Back to the tracker</a></span>
+      <span>Data: FRED · BLS · Census · FHFA · Zillow · Freddie Mac · EIA · NY Fed · KFF · CCAoA · Urban Institute</span>
+    </footer>
+  </div>
+
+</div>
+</body>
+</html>
