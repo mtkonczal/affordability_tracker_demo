@@ -2,9 +2,10 @@ name: Update affordability data
 
 on:
   schedule:
-    # ~9am ET on the 2nd and 16th of each month — a day or two after most
-    # CPI releases, so the tracker picks up the new print quickly.
-    - cron: '0 13 2,16 * *'
+    # ~9am ET on the 1st of each month. Note: CPI and BLS average prices
+    # release mid-month, so this publishes the prior print; add a second
+    # date (e.g. '0 13 1,15 * *') if you want CPI day picked up quickly.
+    - cron: '0 13 1 * *'
   workflow_dispatch: {}
 
 permissions:
@@ -27,6 +28,12 @@ jobs:
       - name: Fetch data
         env:
           BLS_KEY: ${{ secrets.BLS_KEY }}
+          # Required: county renter-household weights for the ZORI state-rent
+          # aggregation (free key: https://api.census.gov/data/key_signup.html)
+          CENSUS_API_KEY: ${{ secrets.CENSUS_API_KEY }}
+          # Optional: state electricity bills (free key: https://www.eia.gov/opendata/).
+          # The script skips that metric, without failing, when unset.
+          EIA_KEY: ${{ secrets.EIA_KEY }}
         run: Rscript fetch_data.R
 
       - name: Commit and push if data changed
