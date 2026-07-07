@@ -6,6 +6,14 @@
 #
 # No FRED API key required — uses quantmod's public FRED connector.
 
+# Some shells (this machine's default, some CI runners) start R in the "C"
+# locale, under which non-ASCII characters (en dashes, ÷) get written out as
+# literal "<c3><b7>"-style escapes instead of real UTF-8 bytes. Force a UTF-8
+# locale so labels/units render correctly regardless of the invoking shell.
+for (loc in c("en_US.UTF-8", "C.UTF-8", "UTF-8")) {
+  if (suppressWarnings(Sys.setlocale("LC_CTYPE", loc)) != "") break
+}
+
 # ── Package bootstrap ──────────────────────────────────────────────────────────
 required <- c("jsonlite")
 for (pkg in required) {
@@ -121,15 +129,21 @@ fetch_bls <- function(bls_id, from = "2000-01-01") {
 # via manifest.json / app_data.js — no HTML edits required.
 #
 # Fields:
-#   id         : slug used for filenames and JS lookups
-#   fred_id    : FRED series identifier
-#   label      : short display name
-#   subtitle   : one-line description shown under the chart title
-#   category   : tab grouping ("daily" | "big" | any future category)
-#   units      : axis label / tooltip suffix
-#   description: longer text shown in tooltip / card header
-#   color      : hex color for the chart line
-#   from       : earliest data date to fetch
+#   id           : slug used for filenames and JS lookups
+#   fred_id      : FRED series identifier
+#   label        : short display name
+#   subtitle     : one-line description shown under the chart title
+#   category     : tab grouping ("daily" | "big" | "labor" | "debt" | "state" | any future category)
+#   units        : axis label / tooltip suffix
+#   description  : longer text shown in tooltip / card header
+#   color        : hex color for the chart line
+#   from         : earliest data date to fetch
+#   geo          : optional — postal-code-style geography, e.g. "CA" for a state series (default "us")
+#   is_new       : optional — TRUE flags a series for the "Newest" filter (version-tracking)
+#   invert_color : optional — TRUE means a rising value is good news (renders green, not red);
+#                  used for wage/labor-demand series where "up" isn't bad
+#   scale        : optional — multiplier applied to fetched values (e.g. 0.001 to show
+#                  millions-of-dollars series in billions for readability)
 
 SERIES <- list(
   # ── Daily Items ──
@@ -369,7 +383,8 @@ SERIES <- list(
     units       = "$ per Hour",
     description = "Average hourly earnings of all private-sector employees. A key measure of wage growth and purchasing power.",
     color       = "#10B981",
-    from        = "2000-01-01"
+    from        = "2000-01-01",
+    invert_color = TRUE
   ),
   list(
     id          = "job_openings",
@@ -380,7 +395,8 @@ SERIES <- list(
     units       = "Thousands of Jobs",
     description = "Total nonfarm job openings from the Job Openings and Labor Turnover Survey (JOLTS). A signal of labor demand.",
     color       = "#8B5CF6",
-    from        = "2000-01-01"
+    from        = "2000-01-01",
+    invert_color = TRUE
   ),
   list(
     id          = "quits_rate",
@@ -391,7 +407,8 @@ SERIES <- list(
     units       = "Rate (%)",
     description = "Quits as a percent of total employment, total nonfarm, monthly, seasonally adjusted (JOLTS). A higher quit rate indicates worker confidence in finding new jobs.",
     color       = "#0891B2",
-    from        = "2000-01-01"
+    from        = "2000-01-01",
+    invert_color = TRUE
   ),
   list(
     id          = "median_weeks_unemployed",
@@ -414,9 +431,177 @@ SERIES <- list(
     description = "Average number of weeks an unemployed person has been seeking work, monthly, seasonally adjusted.",
     color       = "#A855F7",
     from        = "2000-01-01"
+  ),
+  list(
+    id          = "cpi_all_items",
+    fred_id     = "CPIAUCSL",
+    label       = "Inflation (CPI)",
+    subtitle    = "All Items, Seasonally Adjusted",
+    category    = "labor",
+    units       = "Index (1982–84 = 100)",
+    description = "CPI for all urban consumers, all items, seasonally adjusted — the broadest measure of the price level. Used here to compute real (inflation-adjusted) wages.",
+    color       = "#64748B",
+    from        = "2000-01-01",
+    is_new      = TRUE
+  ),
+  # ── Debt (Plan 3) ──
+  # NY Fed Household Debt & Credit tracks these same balances at higher
+  # resolution but only publishes Excel files; these FRED series (Fed G.19
+  # release) cover the same concepts and let the existing CSV fetcher work
+  # unchanged. SLOASM/MVLOASM are the monthly successors to the discontinued
+  # quarterly SLOAS/MVLOAS series (verified current as of this fetch).
+  list(
+    id          = "revolving_credit",
+    fred_id     = "REVOLSL",
+    label       = "Revolving Credit",
+    subtitle    = "Credit Cards & Other Revolving Debt",
+    category    = "debt",
+    units       = "$ Billions",
+    description = "Total revolving consumer credit outstanding (mostly credit cards), owned and securitized. Federal Reserve G.19 release.",
+    color       = "#DC2626",
+    from        = "2000-01-01",
+    scale       = 0.001,
+    is_new      = TRUE
+  ),
+  list(
+    id          = "student_loans",
+    fred_id     = "SLOASM",
+    label       = "Student Loans",
+    subtitle    = "Student Loan Debt Outstanding",
+    category    = "debt",
+    units       = "$ Billions",
+    description = "Total student loan debt owned and securitized. Federal Reserve G.19 release.",
+    color       = "#7C3AED",
+    from        = "2006-01-01",
+    scale       = 0.001,
+    is_new      = TRUE
+  ),
+  list(
+    id          = "auto_loans",
+    fred_id     = "MVLOASM",
+    label       = "Auto Loans",
+    subtitle    = "Motor Vehicle Loan Debt Outstanding",
+    category    = "debt",
+    units       = "$ Billions",
+    description = "Total motor vehicle loan debt owned and securitized. Federal Reserve G.19 release.",
+    color       = "#2563EB",
+    from        = "2000-01-01",
+    scale       = 0.001,
+    is_new      = TRUE
+  ),
+  list(
+    id          = "credit_card_delinquency",
+    fred_id     = "DRCCLACBS",
+    label       = "Credit Card Delinquency",
+    subtitle    = "Delinquency Rate, All Commercial Banks",
+    category    = "debt",
+    units       = "Rate (%)",
+    description = "Share of credit card loan balances 30+ days delinquent at all commercial banks. Quarterly, seasonally adjusted.",
+    color       = "#EA580C",
+    from        = "2000-01-01",
+    is_new      = TRUE
+  ),
+  list(
+    id          = "consumer_loan_delinquency",
+    fred_id     = "DRCLACBS",
+    label       = "Consumer Loan Delinquency",
+    subtitle    = "Delinquency Rate, All Commercial Banks",
+    category    = "debt",
+    units       = "Rate (%)",
+    description = "Share of consumer loan balances 30+ days delinquent at all commercial banks. Quarterly, seasonally adjusted.",
+    color       = "#F97316",
+    from        = "2000-01-01",
+    is_new      = TRUE
+  ),
+  list(
+    id          = "mortgage_delinquency",
+    fred_id     = "DRSFRMACBS",
+    label       = "Mortgage Delinquency",
+    subtitle    = "Single-Family Residential, All Commercial Banks",
+    category    = "debt",
+    units       = "Rate (%)",
+    description = "Share of single-family residential mortgage balances 30+ days delinquent at all commercial banks. Quarterly, seasonally adjusted.",
+    color       = "#B91C1C",
+    from        = "2000-01-01",
+    is_new      = TRUE
   )
   # ── Add future series below ──
 )
+
+# ── State pilot (Plan 2) ─────────────────────────────────────────────────────
+# Five states x four core series, chosen for reliable FRED coverage under a
+# consistent ID pattern (verified against fredgraph.csv before adding):
+#   unemployment  — state LAUS unemployment rate ({STATE}UR)
+#   wages         — state CES avg hourly earnings, total private (SMU...003)
+#   home_prices   — FHFA All-Transactions House Price Index ({STATE}STHPI)
+#   income        — Real (CPI-U-RS-adjusted) median household income (ACS)
+# No state-level CPI exists, so this pilot deliberately avoids implying one.
+STATES <- list(
+  list(code = "CA", name = "California",   uer = "CAUR", hpi = "CASTHPI", inc = "MEHOINUSCAA672N", wage = "SMU06000000500000003"),
+  list(code = "TX", name = "Texas",        uer = "TXUR", hpi = "TXSTHPI", inc = "MEHOINUSTXA672N", wage = "SMU48000000500000003"),
+  list(code = "FL", name = "Florida",      uer = "FLUR", hpi = "FLSTHPI", inc = "MEHOINUSFLA672N", wage = "SMU12000000500000003"),
+  list(code = "OH", name = "Ohio",         uer = "OHUR", hpi = "OHSTHPI", inc = "MEHOINUSOHA672N", wage = "SMU39000000500000003"),
+  list(code = "PA", name = "Pennsylvania", uer = "PAUR", hpi = "PASTHPI", inc = "MEHOINUSPAA672N", wage = "SMU42000000500000003")
+)
+
+state_series <- do.call(c, lapply(STATES, function(s) list(
+  list(
+    id          = paste0("state_", tolower(s$code), "_unemployment"),
+    fred_id     = s$uer,
+    label       = paste0(s$code, " Unemployment"),
+    subtitle    = paste0(s$name, " Unemployment Rate (LAUS)"),
+    category    = "state",
+    units       = "Rate (%)",
+    description = paste0("Unemployment rate for ", s$name, ", seasonally adjusted. From the BLS Local Area Unemployment Statistics program."),
+    color       = "#0EA5E9",
+    from        = "2000-01-01",
+    geo         = s$code,
+    is_new      = TRUE
+  ),
+  list(
+    id          = paste0("state_", tolower(s$code), "_wages"),
+    fred_id     = s$wage,
+    label       = paste0(s$code, " Wages"),
+    subtitle    = paste0(s$name, " Avg Hourly Earnings"),
+    category    = "state",
+    units       = "$ per Hour",
+    description = paste0("Average hourly earnings of all employees, total private, in ", s$name, ". From the BLS state Current Employment Statistics (CES) program, not seasonally adjusted."),
+    color       = "#10B981",
+    from        = "2007-01-01",
+    geo         = s$code,
+    invert_color = TRUE,
+    is_new      = TRUE
+  ),
+  list(
+    id          = paste0("state_", tolower(s$code), "_home_prices"),
+    fred_id     = s$hpi,
+    label       = paste0(s$code, " Home Prices"),
+    subtitle    = paste0(s$name, " House Price Index"),
+    category    = "state",
+    units       = "Index (1980 Q1 = 100)",
+    description = paste0("FHFA All-Transactions House Price Index for ", s$name, ", quarterly, not seasonally adjusted."),
+    color       = "#DC2626",
+    from        = "2000-01-01",
+    geo         = s$code,
+    is_new      = TRUE
+  ),
+  list(
+    id          = paste0("state_", tolower(s$code), "_income"),
+    fred_id     = s$inc,
+    label       = paste0(s$code, " Median Income"),
+    subtitle    = paste0(s$name, " Real Median Household Income"),
+    category    = "state",
+    units       = "$",
+    description = paste0("Real (CPI-U-RS-adjusted) median household income in ", s$name, ", annual, from the Census Bureau American Community Survey."),
+    color       = "#8B5CF6",
+    from        = "2000-01-01",
+    geo         = s$code,
+    invert_color = TRUE,
+    is_new      = TRUE
+  )
+)))
+
+SERIES <- c(SERIES, state_series)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 yoy_pct <- function(df) {
@@ -443,6 +628,11 @@ for (cfg in SERIES) {
       fetch_fred(cfg$fred_id, from = cfg$from)
     }
 
+    # Optional unit-conversion multiplier (e.g. 0.001 to show a
+    # millions-of-dollars series in billions). Purely a display scale —
+    # doesn't touch the underlying FRED values' meaning.
+    if (!is.null(cfg$scale)) df$value <- df$value * cfg$scale
+
     # Write per-series CSV (used by the Download button) — raw levels, since
     # the front end will rebase index series at view-time based on the
     # selected x-axis range.
@@ -459,6 +649,9 @@ for (cfg in SERIES) {
     entry <- c(
       cfg[c("id", "label", "subtitle", "category", "units", "description", "color", "fred_id")],
       list(
+        geo          = if (!is.null(cfg$geo)) cfg$geo else "us",
+        is_new       = isTRUE(cfg$is_new),
+        invert_color = isTRUE(cfg$invert_color),
         rebase       = rebase_flag,
         last_updated = format(Sys.Date(), "%Y-%m-%d"),
         latest_value = round(latest_val, 3),
@@ -478,6 +671,51 @@ for (cfg in SERIES) {
   })
 
   if (!is.null(result)) all_data[[cfg$id]] <- result
+}
+
+# ── Derived series: real (inflation-adjusted) hourly earnings ──────────────────
+# Nominal average hourly earnings deflated by CPI-U (all items), re-expressed
+# in the latest month's dollars so the newest point matches the nominal
+# series and earlier points show what that paycheck is worth today. This is
+# the standard "real wage" construction; no separate wage price index exists.
+if (!is.null(all_data$hourly_earnings) && !is.null(all_data$cpi_all_items)) {
+  wage_df <- all_data$hourly_earnings$data
+  cpi_df  <- all_data$cpi_all_items$data
+  merged  <- merge(wage_df, cpi_df, by = "date", suffixes = c("_wage", "_cpi"))
+  merged  <- merged[order(merged$date), ]
+  latest_cpi <- tail(merged$value_cpi, 1)
+  real_df <- data.frame(
+    date  = merged$date,
+    value = round(merged$value_wage * (latest_cpi / merged$value_cpi), 3)
+  )
+
+  write.csv(real_df, file.path("data", "real_hourly_earnings.csv"), row.names = FALSE)
+
+  latest_val  <- tail(real_df$value, 1)
+  latest_date <- tail(real_df$date,  1)
+  change      <- yoy_pct(real_df)
+
+  all_data$real_hourly_earnings <- list(
+    id           = "real_hourly_earnings",
+    label        = "Real Hourly Earnings",
+    subtitle     = "Inflation-Adjusted, Today's Dollars",
+    category     = "labor",
+    units        = "$ per Hour",
+    description  = "Average hourly earnings of all private-sector employees, deflated by CPI-U (all items, seasonally adjusted) and expressed in the most recent month's dollars. Shows whether paychecks are keeping up with prices.",
+    color        = "#059669",
+    source_note  = "Derived: BLS CES0500000003 ÷ FRED CPIAUCSL",
+    geo          = "us",
+    is_new       = TRUE,
+    invert_color = TRUE,
+    rebase       = FALSE,
+    last_updated = format(Sys.Date(), "%Y-%m-%d"),
+    latest_value = round(latest_val, 3),
+    latest_date  = latest_date,
+    yoy_change   = if (!is.na(change)) change else NULL,
+    n_obs        = nrow(real_df),
+    data         = real_df
+  )
+  cat(sprintf("\nDerived real_hourly_earnings ✓  (%.2f on %s)\n", latest_val, latest_date))
 }
 
 # ── Write outputs ─────────────────────────────────────────────────────────────
@@ -500,3 +738,12 @@ cat(sprintf(
   "\n─────────────────────────────────────────\n✓ %d series written to data/\n  Open index.html in your browser to view.\n─────────────────────────────────────────\n",
   length(all_data)
 ))
+
+# Fail loudly (non-zero exit) if any series didn't fetch, so the GitHub
+# Action's commit step is skipped and the deployed site keeps serving its
+# last good data instead of a build silently missing a card.
+failed_ids <- setdiff(vapply(SERIES, function(x) x$id, character(1)), names(all_data))
+if (length(failed_ids) > 0) {
+  cat(sprintf("\n✗ %d series failed to fetch: %s\n", length(failed_ids), paste(failed_ids, collapse = ", ")))
+  quit(status = 1)
+}

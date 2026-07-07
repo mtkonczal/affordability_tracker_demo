@@ -76,8 +76,11 @@ const ESP = {
 // Format helpers — match existing dashboard
 function fmtVal(val, units = '') {
   if (units.includes('%')) return val.toFixed(2) + '%';
+  if (units.includes('Billions')) return '$' + val.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + 'B';
   if (units.includes('$') || units.toLowerCase().includes('gallon') || units.toLowerCase().includes('hour')) {
-    return '$' + val.toFixed(2);
+    return Math.abs(val) >= 1000
+      ? '$' + val.toLocaleString(undefined, { maximumFractionDigits: 0 })
+      : '$' + val.toFixed(2);
   }
   if (units.includes('Thousands')) return Math.round(val).toLocaleString();
   return val.toFixed(1);
@@ -165,10 +168,7 @@ async function downloadCardAsPNG({
   ctx.fillRect(padX, cardTop, W - padX * 2, 4);
 
   // Eyebrow
-  const eyebrow = (item.category === 'labor'     ? 'Income'
-                : item.category === 'daily'      ? 'Daily'
-                : item.category === 'groceries'  ? 'Groceries'
-                                                 : 'Big-ticket').toUpperCase();
+  const eyebrow = categoryLabel(item.category).toUpperCase();
   ctx.textAlign = 'left';
   ctx.fillStyle = accent;
   ctx.font = `700 18px ${DISPLAY}`;
@@ -236,7 +236,7 @@ async function downloadCardAsPNG({
   ctx.textAlign = 'left';
   ctx.fillText('ECONOMICSECURITYPROJECT.ORG', padX, footerY);
   ctx.textAlign = 'right';
-  ctx.fillText(`SOURCE · FRED · ${item.fred_id}`, W - padX, footerY);
+  ctx.fillText(item.fred_id ? `SOURCE · FRED · ${item.fred_id}` : `SOURCE · ${item.source_note || 'DERIVED'}`, W - padX, footerY);
 
   // Trigger download
   await new Promise((resolve) => {
@@ -245,7 +245,7 @@ async function downloadCardAsPNG({
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${item.id}-${item.fred_id}.png`;
+      a.download = `${item.id}-${item.fred_id || 'derived'}.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -259,12 +259,15 @@ function downloadCSV(item) {
   const header = 'date,value,units\n';
   const units = (item.units || '').replace(/"/g, '""');
   const body = item.data.map(r => `${r.date},${r.value},"${units}"`).join('\n');
-  const csv = `# ${item.label} — FRED ${item.fred_id}\n# Source: https://fred.stlouisfed.org/series/${item.fred_id}\n${header}${body}\n`;
+  const sourceLine = item.fred_id
+    ? `# ${item.label} — FRED ${item.fred_id}\n# Source: https://fred.stlouisfed.org/series/${item.fred_id}\n`
+    : `# ${item.label} — ${item.source_note || 'Derived from FRED/BLS data'}\n`;
+  const csv = `${sourceLine}${header}${body}\n`;
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${item.id}-${item.fred_id}.csv`;
+  a.download = `${item.id}-${item.fred_id || 'derived'}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -378,9 +381,17 @@ function scaleByCPI(series, date, refPrice, anchorDate = '2025-01-01') {
   return refPrice * (at / anchor);
 }
 
+const CATEGORY_LABELS = {
+  labor: 'Income', daily: 'Daily', groceries: 'Groceries', big: 'Big-ticket',
+  debt: 'Debt', state: 'By State',
+};
+function categoryLabel(category) {
+  return CATEGORY_LABELS[category] || 'Big-ticket';
+}
+
 Object.assign(window, {
   ESP, fmtVal, fmtDate, pctChange, valueAt, rebase, sliceFrom, downloadCSV, downloadCardAsPNG,
-  linePath, areaPath, toPoints, EVENTS, hoursToAfford, REFERENCE_PRICES, scaleByCPI,
+  linePath, areaPath, toPoints, EVENTS, hoursToAfford, REFERENCE_PRICES, scaleByCPI, categoryLabel,
 });
 
 })();
@@ -393,7 +404,7 @@ Object.assign(window, {
 // appear as interactive Chart.js cards (transparent backgrounds, hover tooltips)
 // and in the year-by-year heatmap.
 
-const { ESP, fmtVal, fmtDate, pctChange, valueAt, sliceFrom, downloadCSV, downloadCardAsPNG } = window;
+const { ESP, fmtVal, fmtDate, pctChange, valueAt, sliceFrom, downloadCSV, downloadCardAsPNG, categoryLabel, hoursToAfford, REFERENCE_PRICES, scaleByCPI } = window;
 const { useState, useMemo, useEffect, useRef } = React;
 
 const FILTERS = [
@@ -401,7 +412,18 @@ const FILTERS = [
   { id: 'big',       label: 'Big-ticket',   matches: (it) => it.category === 'big' },
   { id: 'groceries', label: 'Groceries',    matches: (it) => it.category === 'groceries' },
   { id: 'work',      label: 'Work & wages', matches: (it) => it.category === 'labor' },
+  { id: 'debt',      label: 'Debt',         matches: (it) => it.category === 'debt' },
+  { id: 'state',     label: 'By state',     matches: (it) => it.category === 'state' },
+  { id: 'newest',    label: 'Newest',       matches: (it) => !!it.is_new },
   { id: 'all',       label: 'All metrics',  matches: () => true },
+];
+
+const STATE_OPTIONS = [
+  { code: 'CA', name: 'California' },
+  { code: 'TX', name: 'Texas' },
+  { code: 'FL', name: 'Florida' },
+  { code: 'OH', name: 'Ohio' },
+  { code: 'PA', name: 'Pennsylvania' },
 ];
 
 // ── Per-series annotations ────────────────────────────────────────────────
@@ -820,6 +842,7 @@ function ChartCard({ item, since }) {
 
   const change = pctChange(item.data, cardSince);
   const up = change != null && change >= 0;
+  const bad = item.invert_color ? !up : up;
 
   return (
     <div ref={cardRef} style={{
@@ -835,7 +858,7 @@ function ChartCard({ item, since }) {
             fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
             fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase',
             fontWeight: 700, color: accent, marginBottom: 4,
-          }}>{item.category === 'labor' ? 'Income' : item.category === 'daily' ? 'Daily' : item.category === 'groceries' ? 'Groceries' : 'Big-ticket'}</div>
+          }}>{categoryLabel(item.category)}</div>
           <div style={{
             fontFamily: 'Publico, Georgia, serif',
             fontSize: 20, fontWeight: 500, lineHeight: 1.15, color: INK,
@@ -853,7 +876,7 @@ function ChartCard({ item, since }) {
           <div style={{
             fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
             fontSize: 11, fontWeight: 700, marginTop: 6,
-            color: up ? WARM_RED : '#2E7D5B',
+            color: bad ? WARM_RED : '#2E7D5B',
           }}>{item.rebase
               ? (up ? '↑ ' : '↓ ') + (activeRange.id === '2020' ? 'since 2020' : activeRange.id === '2025' ? 'since 2025' : activeRange.id === 'Max' ? 'all-time' : `over ${activeRange.label}`)
               : (up ? '↑ +' : '↓ ') + Math.abs(change || 0).toFixed(1) + '% ' + (activeRange.id === '2020' ? 'since 2020' : activeRange.id === '2025' ? 'since 2025' : activeRange.id === 'Max' ? 'all-time' : `over ${activeRange.label}`)}</div>
@@ -899,16 +922,20 @@ function ChartCard({ item, since }) {
         paddingTop: 8, borderTop: `1px solid rgba(27,42,78,.1)`,
         display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
       }}>
-        <a
-          href={`https://fred.stlouisfed.org/series/${item.fred_id}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ color: SOFT, textDecoration: 'none', borderBottom: '1px dotted rgba(27,42,78,.3)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = NAVY; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = SOFT; }}
-        >
-          Source · FRED · {item.fred_id} ↗
-        </a>
+        {item.fred_id ? (
+          <a
+            href={`https://fred.stlouisfed.org/series/${item.fred_id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: SOFT, textDecoration: 'none', borderBottom: '1px dotted rgba(27,42,78,.3)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = NAVY; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = SOFT; }}
+          >
+            Source · FRED · {item.fred_id} ↗
+          </a>
+        ) : (
+          <span>{item.source_note || 'Derived from FRED/BLS data'}</span>
+        )}
         <span style={{ display: 'flex', gap: 8, alignItems: 'center' }} data-export-hide>
           <span>{item.units}</span>
           <button
@@ -937,7 +964,7 @@ function ChartCard({ item, since }) {
               const changeText = item.rebase
                 ? (up ? '↑ ' : '↓ ') + rangeLabel
                 : (up ? '↑ +' : '↓ ') + Math.abs(change || 0).toFixed(1) + '% ' + rangeLabel;
-              const changeColor = up ? WARM_RED : '#2E7D5B';
+              const changeColor = bad ? WARM_RED : '#2E7D5B';
               try {
                 await downloadCardAsPNG({
                   chartCanvas, item, accent,
@@ -1052,26 +1079,84 @@ function Heatmap({ items }) {
   );
 }
 
+// ── Hours to afford ─────────────────────────────────────────────────────────
+// Uses the average hourly wage plus a reference price (scaled forward by
+// that item's own CPI, so it tracks inflation rather than staying frozen)
+// to answer "how many hours of work does this cost."
+function HoursToAfford({ data }) {
+  const wageItem = data.hourly_earnings;
+  if (!wageItem) return null;
+  const wage = wageItem.latest_value;
+  const asOf = wageItem.latest_date;
+
+  const rows = [
+    data.groceries && {
+      label: 'A week of groceries',
+      price: scaleByCPI(data.groceries.data, asOf, REFERENCE_PRICES.groceriesWeekly2025),
+    },
+    data.rent && {
+      label: "A month's rent",
+      price: scaleByCPI(data.rent.data, asOf, REFERENCE_PRICES.rentMonthly2025),
+    },
+  ].filter(Boolean).map(r => ({ ...r, hours: hoursToAfford(r.price, wage) })).filter(r => r.hours != null);
+
+  if (!rows.length) return null;
+
+  return (
+    <div style={{
+      background: NAVY, color: PAPER, padding: '26px 32px',
+      display: 'flex', flexWrap: 'wrap', gap: 32, alignItems: 'center',
+      marginBottom: 28,
+    }}>
+      <div style={{ maxWidth: 240 }}>
+        <div style={{
+          fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+          fontSize: 11, letterSpacing: '.18em', textTransform: 'uppercase',
+          color: '#9BA8C2', marginBottom: 6, fontWeight: 700,
+        }}>Hours of work</div>
+        <div style={{ fontFamily: 'Publico, Georgia, serif', fontSize: 15, fontStyle: 'italic', color: '#E8C9A8' }}>
+          At the average wage of ${wage.toFixed(2)}/hr
+        </div>
+      </div>
+      {rows.map(r => (
+        <div key={r.label}>
+          <div style={{ fontFamily: 'Publico, Georgia, serif', fontSize: 40, fontWeight: 500, lineHeight: 1 }}>
+            {r.hours.toFixed(1)}<span style={{ fontSize: 18 }}> hrs</span>
+          </div>
+          <div style={{
+            fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+            fontSize: 12, color: '#9BA8C2', marginTop: 6,
+          }}>{r.label} (~${Math.round(r.price).toLocaleString()})</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Main V3 ─────────────────────────────────────────────────────────────────
 function V3({ data }) {
   const allItems = useMemo(() => Object.values(data), [data]);
   const [filterId, setFilterId] = useState('all');
+  const [selectedState, setSelectedState] = useState('CA');
   // Set of selected item ids — start with daily items selected.
   const [selectedIds, setSelectedIds] = useState(() =>
     new Set(allItems.filter(i => i.category === 'daily').map(i => i.id))
   );
 
   const filter = FILTERS.find(f => f.id === filterId) || FILTERS[0];
-  const visibleItems = useMemo(() => allItems.filter(filter.matches), [allItems, filter]);
+  const visibleItems = useMemo(() => {
+    const base = allItems.filter(filter.matches);
+    return filter.id === 'state' ? base.filter(i => i.geo === selectedState) : base;
+  }, [allItems, filter, selectedState]);
   const selectedItems = useMemo(
     () => allItems.filter(i => selectedIds.has(i.id)),
     [allItems, selectedIds]
   );
 
-  // When filter changes, auto-select everything in that filter.
+  // When the filter (or, in state mode, the picked state) changes, auto-select everything visible.
   useEffect(() => {
     setSelectedIds(new Set(visibleItems.map(i => i.id)));
-  }, [filterId]); // intentionally only on filter change
+  }, [filterId, selectedState]); // intentionally not on visibleItems itself
 
   const toggleId = (id) => {
     setSelectedIds(prev => {
@@ -1112,11 +1197,29 @@ function V3({ data }) {
         sub: "Paychecks have grown — the question is whether they've kept up." },
     ],
     work: [
-      { label: 'Hourly wages since 2020', value: fmtPct(pct('hourly_earnings')),
-        sub: 'Average hourly earnings, all private employees.' },
+      { label: 'Real wages since 2020', value: fmtPct(pct('real_hourly_earnings')),
+        sub: 'Hourly earnings after inflation — the number that matters.' },
       { label: 'Unemployment today', value:
           data.unemployment ? `${data.unemployment.latest_value.toFixed(1)}%` : '—',
         sub: 'Civilian unemployment rate, seasonally adjusted.' },
+    ],
+    debt: [
+      { label: 'Credit card delinquency', value:
+          data.credit_card_delinquency ? `${data.credit_card_delinquency.latest_value.toFixed(2)}%` : '—',
+        sub: '30+ days past due, all commercial banks.' },
+      { label: 'Student loan debt', value:
+          data.student_loans ? `$${(data.student_loans.latest_value / 1000).toFixed(2)}T` : '—',
+        sub: 'Total balances owned and securitized, Federal Reserve G.19.' },
+    ],
+    state: [
+      { label: `${selectedState} unemployment`, value:
+          data[`state_${selectedState.toLowerCase()}_unemployment`]
+            ? `${data[`state_${selectedState.toLowerCase()}_unemployment`].latest_value.toFixed(1)}%` : '—',
+        sub: 'Seasonally adjusted, latest month (BLS LAUS).' },
+      { label: `${selectedState} median income`, value:
+          data[`state_${selectedState.toLowerCase()}_income`]
+            ? `$${Math.round(data[`state_${selectedState.toLowerCase()}_income`].latest_value).toLocaleString()}` : '—',
+        sub: 'Real median household income, most recent year (ACS).' },
     ],
     all: [
       { label: 'Groceries since 2020', value: fmtPct(pct('groceries')),
@@ -1132,6 +1235,10 @@ function V3({ data }) {
     daily:     'Costs households face every week.',
     big:       'The expenses that shape long-term budgets.',
     groceries: 'Food at home — the line item people quote first.',
+    work:      'Wages, jobs, and whether paychecks are keeping up.',
+    debt:      'Balances and delinquencies — how households are financing the gap.',
+    state:     'No state has its own CPI — this pairs what does exist state-by-state.',
+    newest:    'Series added in the latest release.',
   }[filterId];
 
   return (
@@ -1227,6 +1334,37 @@ function V3({ data }) {
 
       </header>
 
+      {/* State picker — only in "By state" filter */}
+      {filterId === 'state' && (
+        <div className="at-pad" style={{
+          background: PAPER, borderBottom: `1px solid rgba(27,42,78,.18)`,
+          padding: '14px 56px 4px',
+          display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+        }}>
+          <span style={v3Styles.checkLabel}>State</span>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {STATE_OPTIONS.map(s => {
+              const active = s.code === selectedState;
+              return (
+                <button
+                  key={s.code}
+                  onClick={() => setSelectedState(s.code)}
+                  style={{
+                    fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+                    fontSize: 13, fontWeight: active ? 700 : 600,
+                    padding: '7px 14px',
+                    border: `1.5px solid ${active ? NAVY : 'rgba(27,42,78,.22)'}`,
+                    background: active ? NAVY : 'transparent',
+                    color: active ? PAPER : INK,
+                    cursor: 'pointer', borderRadius: 100,
+                  }}
+                >{s.name}</button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Per-item checkboxes */}
       <div className="at-pad" style={v3Styles.checkBar}>
         <span style={v3Styles.checkLabel}>Show</span>
@@ -1247,6 +1385,8 @@ function V3({ data }) {
 
       {/* Body */}
       <div className="at-pad" style={{ padding: '36px 56px 56px' }}>
+        {filterId === 'work' && <HoursToAfford data={data} />}
+
         {/* Charts grid */}
         <div className="at-section-head" style={v3Styles.sectionHead}>
           <span style={v3Styles.sectionLabel}>§01</span>

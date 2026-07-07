@@ -43,11 +43,8 @@ Nice to haves
   * State-by-state ranking on rent/housing burden?   
   * Avg. healthcare costs as a percentage of avg. incomes in the state?  
   * Hourly wages compared to prices of things \- “like avg. wage worker has to work 2 hours to afford one bag of coffee in X state”
-
-Feedback from Erion: 
-
-* Not super important stuff but \- if its possible to color coordinate things that go together or stack them next to each other (like groceries \+ eggs etc. all being shades of the same color so I can quickly visually make sure I've got them all and not missing them). When I have all metrics selected, color coding would help me track what I need when I'm looking quickly for a fact or figure.  
-  * The auto filters are helpful for this, but I almost wish I could see the rest of the filters  in like a grayed out bar underneath. E.g., after I select, say, "Big Ticket" items and I want to throw "groceries" in there as I look for a comparison point, I have to click out of "Big Ticket", go back to all, then select all the "Big Ticket" items again \+ the grocery item I wanted.  
+* Not super important stuff but \- if its possible to color coordinate things that go together or stack them next to each other (like groceries \+ eggs etc. all being shades of the same color so I can quickly visually make sure I've got them all and not missing them). When I have all metrics selected, color coding would help me track what I need when I'm looking quickly for a fact or figure.
+* The auto filters are helpful for this, but I almost wish I could see the rest of the filters  in like a grayed out bar underneath. E.g., after I select, say, "Big Ticket" items and I want to throw "groceries" in there as I look for a comparison point, I have to click out of "Big Ticket", go back to all, then select all the "Big Ticket" items again \+ the grocery item I wanted.  
     * I don't necessarily think the %vs$ is confusing but toggling (if possible) is always useful to compare relative vs. real $ amounts. That'll be even more useful with the state data so I can quickly say something like "Illinois families are spending $X more on groceries \- 5% more than our neighbors in Wisconsin" kind of thing.  
     * One personal nitpick- I think percentages with just one zero after the decimal is easier to read on charts (or none if the decimal-point variations aren't super important to the issue tracked). Not an absolutely necessary change, just one guy's opinion.  
     * Also- Love the heat map.
