@@ -10,8 +10,11 @@ Raw source provenance (see data/annual/README.md for full details):
   - area_report_by_year.xlsx          NY Fed State-Level Household Debt Statistics
   - urban_state_national_medical.csv  Urban Institute Debt in America (Oct 2025 update)
   - urban_state_national_overall.csv  Urban Institute Debt in America (Oct 2025 update)
-  - kff_benchmark_premiums.csv        KFF Marketplace Average Benchmark Premiums (extracted)
   - ccaoa_2025_center_infant.csv      Child Care Aware of America 2025 (extracted)
+
+Note: KFF ACA premiums and the uninsured rate are handled separately, as full
+time series, by scripts/fetch_kff.py (they feed national + state metrics, not
+the single-value annual tiles here).
 
 Run from the repo root:  python3 scripts/convert_annual.py
 """
@@ -79,15 +82,6 @@ def convert_urban():
         write_out(out, rows)
 
 
-def convert_kff(year="2026"):
-    with open(os.path.join(RAW, "kff_benchmark_premiums.csv")) as f:
-        rows = []
-        for r in csv.DictReader(f):
-            if r["year"] == year and r["location"] in STATE_NAMES:
-                rows.append((STATE_NAMES[r["location"]], int(float(r["average_benchmark_premium"]))))
-    write_out("aca_benchmark.csv", rows)
-
-
 def convert_ccaoa():
     with open(os.path.join(RAW, "ccaoa_2025_center_infant.csv")) as f:
         rows = []
@@ -148,7 +142,6 @@ if __name__ == "__main__":
         sys.exit(f"Raw source directory not found: {RAW}")
     print("Converting annual state datasets:")
     convert_urban()
-    convert_kff()
     convert_ccaoa()
     convert_nyfed()
     print("Done. Re-run `Rscript fetch_data.R` to embed into state payloads.")

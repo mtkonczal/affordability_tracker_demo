@@ -361,6 +361,44 @@
       "yoy_change": -5.02,
       "n_obs": 1383
     },
+    "aca_benchmark_premium": {
+      "id": "aca_benchmark_premium",
+      "label": "ACA Benchmark Premium",
+      "subtitle": "Second-Lowest-Cost Silver, Age 40",
+      "category": "big",
+      "units": "$ per Month",
+      "description": "Average benchmark premium — the second-lowest-cost silver Marketplace plan for a 40-year-old, the plan used to set ACA premium subsidies. KFF analysis of Healthcare.gov and state rate filings.",
+      "color": "#9333EA",
+      "is_new": true,
+      "invert_color": false,
+      "overlay_only": false,
+      "rebase": false,
+      "source_note": "KFF State Health Facts, Average Marketplace Premiums by Metal Tier (annual)",
+      "last_updated": "2026-07-07",
+      "latest_value": 625,
+      "latest_date": "2026-01-01",
+      "yoy_change": 25.75,
+      "n_obs": 9
+    },
+    "uninsured_rate": {
+      "id": "uninsured_rate",
+      "label": "Uninsured Rate",
+      "subtitle": "Share of Population Without Coverage",
+      "category": "big",
+      "units": "Rate (%)",
+      "description": "Share of the total population with no health insurance coverage. KFF State Health Facts, Health Insurance Coverage of the Total Population (KFF estimates from the Census ACS). No data for 2020, which the ACS did not release on a comparable basis.",
+      "color": "#A21CAF",
+      "is_new": true,
+      "invert_color": false,
+      "overlay_only": false,
+      "rebase": false,
+      "source_note": "KFF State Health Facts, Health Insurance Coverage of the Total Population (annual)",
+      "last_updated": "2026-07-07",
+      "latest_value": 8.2,
+      "latest_date": "2024-01-01",
+      "yoy_change": 3.8,
+      "n_obs": 16
+    },
     "unemployment": {
       "id": "unemployment",
       "label": "Unemployment Rate",
@@ -746,18 +784,35 @@
         "invert_color": false,
         "rebase": false,
         "n_states": 51
+      },
+      {
+        "id": "aca_benchmark_premium",
+        "label": "ACA Benchmark Premium",
+        "units": "$ per Month",
+        "color": "#9333EA",
+        "national_id": "aca_benchmark_premium",
+        "frequency": "Annual",
+        "source_label": "KFF State Health Facts",
+        "description": "Average benchmark premium — the second-lowest-cost silver Marketplace plan for a 40-year-old, the plan ACA subsidies are pegged to. KFF analysis of Healthcare.gov and state rate filings.",
+        "invert_color": false,
+        "rebase": false,
+        "n_states": 51
+      },
+      {
+        "id": "uninsured_rate",
+        "label": "Uninsured Rate",
+        "units": "Rate (%)",
+        "color": "#A21CAF",
+        "national_id": "uninsured_rate",
+        "frequency": "Annual",
+        "source_label": "KFF State Health Facts",
+        "description": "Share of the total population with no health insurance coverage. KFF Health Insurance Coverage of the Total Population. No 2020 data point (ACS did not release comparably).",
+        "invert_color": false,
+        "rebase": false,
+        "n_states": 51
       }
     ],
     "annual": [
-      {
-        "id": "aca_benchmark",
-        "label": "ACA Benchmark Premium",
-        "units": "$ per month, 40-year-old",
-        "year": "Plan year 2026",
-        "source": "KFF",
-        "source_url": "https://www.kff.org/affordable-care-act/state-indicator/marketplace-average-benchmark-premiums/",
-        "file": "aca_benchmark.csv"
-      },
       {
         "id": "childcare_infant",
         "label": "Infant Child Care, Center-Based",

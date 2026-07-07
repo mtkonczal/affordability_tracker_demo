@@ -25,6 +25,18 @@ jobs:
       - name: Install R dependencies
         run: Rscript -e 'install.packages("jsonlite", repos = "https://cran.r-project.org/")'
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # KFF ACA premium + uninsured rate. KFF updates roughly yearly, but
+      # running monthly is idempotent and picks up new years automatically.
+      # Non-blocking: if KFF changes its page layout, fetch_data.R still reads
+      # the last-good data/kff/*.csv, so the monthly CPI refresh never breaks.
+      - name: Refresh KFF annual series (non-blocking)
+        continue-on-error: true
+        run: python3 scripts/fetch_kff.py
+
       - name: Fetch data
         env:
           BLS_KEY: ${{ secrets.BLS_KEY }}

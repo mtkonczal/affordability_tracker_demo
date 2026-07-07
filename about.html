@@ -212,6 +212,18 @@
           <td><span class="freq m">Monthly</span> <span class="freq q">Quarterly</span></td>
           <td>Balances owned and securitized; delinquency is 30+ days at all commercial banks.</td>
         </tr>
+        <tr>
+          <td><b>ACA benchmark premium</b></td>
+          <td><a href="https://www.kff.org/affordable-care-act/state-indicator/average-marketplace-premiums-by-metal-tier/" target="_blank" rel="noopener">KFF</a> State Health Facts (Average Marketplace Premiums by Metal Tier)</td>
+          <td><span class="freq a">Annual</span></td>
+          <td>Monthly premium for the second-lowest-cost silver ("benchmark") plan for a 40-year-old — the plan ACA subsidies are pegged to. Plan years 2018 onward.</td>
+        </tr>
+        <tr>
+          <td><b>Uninsured rate</b></td>
+          <td><a href="https://www.kff.org/state-health-policy-data/state-indicator/total-population/" target="_blank" rel="noopener">KFF</a> State Health Facts (Health Insurance Coverage of the Total Population)</td>
+          <td><span class="freq a">Annual</span></td>
+          <td>Share of the total population with no health coverage, KFF estimates from the Census ACS. 2008 onward; no 2020 point (the ACS did not release comparably that year).</td>
+        </tr>
       </tbody>
     </table>
     </div>
@@ -261,6 +273,18 @@
           <td><span class="freq m">Monthly</span></td>
           <td>Average monthly residential bill (revenue ÷ customers). Appears once the tracker's EIA API key is configured; recent months are preliminary and revised.</td>
         </tr>
+        <tr>
+          <td><b>ACA benchmark premium</b></td>
+          <td><a href="https://www.kff.org/affordable-care-act/state-indicator/average-marketplace-premiums-by-metal-tier/" target="_blank" rel="noopener">KFF</a> State Health Facts</td>
+          <td><span class="freq a">Annual</span></td>
+          <td>Same benchmark (second-lowest silver, age 40) premium as the national card, per state, plan years 2018 onward. No state-level price index exists — this is a dollar premium, not a CPI.</td>
+        </tr>
+        <tr>
+          <td><b>Uninsured rate</b></td>
+          <td><a href="https://www.kff.org/state-health-policy-data/state-indicator/total-population/" target="_blank" rel="noopener">KFF</a> State Health Facts</td>
+          <td><span class="freq a">Annual</span></td>
+          <td>Share of each state's population with no health coverage, KFF estimates from the Census ACS. 2008 onward, no 2020 point.</td>
+        </tr>
       </tbody>
     </table>
     </div>
@@ -274,11 +298,6 @@
     <table>
       <thead><tr><th>Indicator</th><th>Source &amp; vintage</th><th>Definition</th></tr></thead>
       <tbody>
-        <tr>
-          <td><b>ACA benchmark premium</b></td>
-          <td><a href="https://www.kff.org/affordable-care-act/state-indicator/marketplace-average-benchmark-premiums/" target="_blank" rel="noopener">KFF</a>, plan year 2026</td>
-          <td>Monthly unsubsidized premium for the second-lowest-cost silver plan, 40-year-old, county-weighted by plan selections.</td>
-        </tr>
         <tr>
           <td><b>Infant child care, center-based</b></td>
           <td><a href="https://info.childcareaware.org/price-and-supply-2025" target="_blank" rel="noopener">Child Care Aware of America</a>, 2025</td>
@@ -313,10 +332,25 @@
     <div class="method">
       <h3>The three anchors</h3>
       <p>The tracker measures change from three moments: <b>January 2025</b> (the current
-      administration), <b>December 2019</b> (just before the pandemic), and <b>2000</b>
-      (a generation). We use December 2019 rather than early 2020 deliberately: anchoring
-      at 2020 bakes the COVID crash into the baseline — gas prices collapsed in April
-      2020, for instance — and produces comparisons that don't survive scrutiny.</p>
+      administration), <b>2019</b> (just before the pandemic), and <b>2000</b>
+      (a generation). The 2019 anchor is December 2019, used deliberately rather than early
+      2020: anchoring at 2020 bakes the COVID crash into the baseline — gas prices collapsed
+      in April 2020, for instance — and produces comparisons that don't survive scrutiny.
+      The tracker opens on the 2019 anchor by default.</p>
+    </div>
+
+    <div class="method">
+      <h3>Nominal vs. real dollars</h3>
+      <p>A global <b>Nominal / Real</b> switch controls the whole page. <b>Nominal</b> is what
+      you actually pay at the register. <b>Real</b> deflates each dollar and price-index series
+      by the CPI-U (all items) and re-expresses it in the latest month's dollars, so you see
+      whether something rose faster or slower than inflation overall — the newest point is
+      unchanged and earlier points are lifted into today's dollars. Real is a no-op for rates
+      (unemployment, mortgage rate, uninsured rate), durations, and counts, which are already
+      normalized over time, and for series that arrive already inflation-adjusted (median
+      household income, real hourly earnings), which are never deflated twice. Because no
+      state-level price index exists, state series are deflated by the national CPI-U — the
+      standard fallback.</p>
     </div>
 
     <div class="method">

@@ -1,14 +1,5 @@
 [
   {
-    "id": "aca_benchmark",
-    "label": "ACA Benchmark Premium",
-    "units": "$ per month, 40-year-old",
-    "year": "Plan year 2026",
-    "source": "KFF",
-    "source_url": "https://www.kff.org/affordable-care-act/state-indicator/marketplace-average-benchmark-premiums/",
-    "file": "aca_benchmark.csv"
-  },
-  {
     "id": "childcare_infant",
     "label": "Infant Child Care, Center-Based",
     "units": "$ per year",

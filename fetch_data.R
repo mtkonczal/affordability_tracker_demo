@@ -417,6 +417,37 @@ SERIES <- list(
     color       = "#5B21B6",
     from        = "2000-01-01"
   ),
+  # ── Health coverage (KFF, violet family) ──
+  # Annual, from data/kff/*.csv (scripts/fetch_kff.py). Dollar/percent levels,
+  # not index series, so they display like the other $ / rate cards.
+  list(
+    id          = "aca_benchmark_premium",
+    source      = "kff",
+    kff_id      = "aca_benchmark_premium",
+    label       = "ACA Benchmark Premium",
+    subtitle    = "Second-Lowest-Cost Silver, Age 40",
+    category    = "big",
+    units       = "$ per Month",
+    description = "Average benchmark premium — the second-lowest-cost silver Marketplace plan for a 40-year-old, the plan used to set ACA premium subsidies. KFF analysis of Healthcare.gov and state rate filings.",
+    color       = "#9333EA",
+    from        = "2018-01-01",
+    is_new      = TRUE,
+    source_note = "KFF State Health Facts, Average Marketplace Premiums by Metal Tier (annual)"
+  ),
+  list(
+    id          = "uninsured_rate",
+    source      = "kff",
+    kff_id      = "uninsured_rate",
+    label       = "Uninsured Rate",
+    subtitle    = "Share of Population Without Coverage",
+    category    = "big",
+    units       = "Rate (%)",
+    description = "Share of the total population with no health insurance coverage. KFF State Health Facts, Health Insurance Coverage of the Total Population (KFF estimates from the Census ACS). No data for 2020, which the ACS did not release on a comparable basis.",
+    color       = "#A21CAF",
+    from        = "2008-01-01",
+    is_new      = TRUE,
+    source_note = "KFF State Health Facts, Health Insurance Coverage of the Total Population (annual)"
+  ),
   # ── Labor Market (green family) ──
   list(
     id          = "unemployment",
@@ -725,6 +756,34 @@ STATE_METRICS <- list(
     source       = "eia",
     from         = "2008-01-01",
     round_digits = 2
+  ),
+  list(
+    id           = "aca_benchmark_premium",
+    label        = "ACA Benchmark Premium",
+    units        = "$ per Month",
+    color        = "#9333EA",
+    national_id  = "aca_benchmark_premium",
+    frequency    = "Annual",
+    source_label = "KFF State Health Facts",
+    description  = "Average benchmark premium — the second-lowest-cost silver Marketplace plan for a 40-year-old, the plan ACA subsidies are pegged to. KFF analysis of Healthcare.gov and state rate filings.",
+    source       = "kff",
+    kff_id       = "aca_benchmark_premium",
+    from         = "2018-01-01",
+    round_digits = 0
+  ),
+  list(
+    id           = "uninsured_rate",
+    label        = "Uninsured Rate",
+    units        = "Rate (%)",
+    color        = "#A21CAF",
+    national_id  = "uninsured_rate",
+    frequency    = "Annual",
+    source_label = "KFF State Health Facts",
+    description  = "Share of the total population with no health insurance coverage. KFF Health Insurance Coverage of the Total Population. No 2020 data point (ACS did not release comparably).",
+    source       = "kff",
+    kff_id       = "uninsured_rate",
+    from         = "2008-01-01",
+    round_digits = 1
   )
 )
 
@@ -937,6 +996,39 @@ read_annual_layers <- function() {
   list(meta = kept, values = values)
 }
 
+# ── KFF annual time series ────────────────────────────────────────────────────
+# Multi-year, state-level indicators pulled from KFF State Health Facts by the
+# companion script scripts/fetch_kff.py (run yearly). Unlike the single-value
+# annual layers above, these are full time series (one point per year) and feed
+# both a national card and a state metric. Each file under data/kff/ is a long
+# CSV with columns date,code,value (code = "US" or 2-letter postal). Returns a
+# named list: kff[[id]][[code]] = data.frame(date, value) sorted by date.
+# Committed artifacts — this reads them; it does not hit the network. If a file
+# is absent the series simply won't build (and fails loudly downstream).
+read_kff <- function() {
+  dir <- file.path("data", "kff")
+  if (!dir.exists(dir)) return(list())
+  out <- list()
+  for (f in list.files(dir, pattern = "\\.csv$", full.names = TRUE)) {
+    id <- sub("\\.csv$", "", basename(f))
+    df <- tryCatch(read.csv(f, stringsAsFactors = FALSE), error = function(e) NULL)
+    if (is.null(df) || !all(c("date", "code", "value") %in% names(df))) {
+      cat(sprintf("  KFF file %s: needs date,code,value columns, skipping\n", basename(f)))
+      next
+    }
+    df <- df[!is.na(df$value), ]
+    series <- list()
+    for (code in unique(df$code)) {
+      sub <- df[df$code == code, c("date", "value")]
+      sub <- sub[order(sub$date), ]
+      rownames(sub) <- NULL
+      series[[code]] <- sub
+    }
+    out[[id]] <- series
+  }
+  out
+}
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 yoy_pct <- function(df) {
   latest      <- tail(df, 1)
@@ -963,6 +1055,13 @@ zori <- tryCatch(fetch_zori(), error = function(e) {
 })
 if (!is.null(zori)) cat(sprintf(" ✓  (%d states + US)\n", length(zori) - 1))
 
+# KFF annual series (data/kff/*.csv), produced yearly by scripts/fetch_kff.py.
+# Read once and reused for the national cards and every state metric below.
+cat("Reading KFF annual series (data/kff/) ...")
+kff <- read_kff()
+cat(sprintf(" ✓  (%s)\n",
+            if (length(kff)) paste(names(kff), collapse = ", ") else "none found"))
+
 all_data <- list()
 
 for (cfg in SERIES) {
@@ -975,6 +1074,12 @@ for (cfg in SERIES) {
     } else if (!is.null(cfg$source) && cfg$source == "zori") {
       if (is.null(zori)) stop("ZORI fetch failed upstream")
       zori[["US"]]$data
+    } else if (!is.null(cfg$source) && cfg$source == "kff") {
+      ks <- kff[[cfg$kff_id]]
+      if (is.null(ks) || is.null(ks[["US"]]))
+        stop("KFF series missing — run scripts/fetch_kff.py: ", cfg$kff_id)
+      d <- ks[["US"]]
+      d[d$date >= cfg$from, ]
     } else {
       fetch_fred(cfg$fred_id, from = cfg$from)
     }
@@ -1003,7 +1108,8 @@ for (cfg in SERIES) {
         invert_color = isTRUE(cfg$invert_color),
         overlay_only = isTRUE(cfg$overlay_only),
         rebase       = rebase_flag,
-        source_note  = if (!is.null(cfg$source) && cfg$source == "zori")
+        source_note  = if (!is.null(cfg$source_note)) cfg$source_note
+                       else if (!is.null(cfg$source) && cfg$source == "zori")
                          "Zillow Observed Rent Index (ZORI), smoothed & seasonally adjusted" else NULL,
         last_updated = format(Sys.Date(), "%Y-%m-%d"),
         latest_value = round(latest_val, 3),
@@ -1109,6 +1215,26 @@ for (metric in STATE_METRICS) {
     }
     cat(sprintf("  ✓ %d states from EIA-861M\n",
                 sum(vapply(STATES, function(s) !is.null(eia[[s$code]]), logical(1)))))
+    next
+  }
+
+  if (!is.null(metric$source) && metric$source == "kff") {
+    ks <- kff[[metric$kff_id]]
+    if (is.null(ks)) {
+      cat("  ✗ KFF data missing — run scripts/fetch_kff.py; skipping\n")
+      failures <- c(failures, paste0("state_", metric$id))
+      next
+    }
+    n_ok <- 0
+    for (s in STATES) {
+      d <- ks[[s$code]]
+      if (is.null(d) || nrow(d) < 2) next
+      d <- d[d$date >= metric$from, ]
+      d$value <- round(d$value, metric$round_digits)
+      state_results[[s$code]][[metric$id]] <- list(data = d)
+      n_ok <- n_ok + 1
+    }
+    cat(sprintf("  ✓ %d states from KFF\n", n_ok))
     next
   }
 

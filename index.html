@@ -94,7 +94,7 @@ function fmtVal(val, units = '') {
 const ANCHORS = [
   { id: '1y',   label: '1 Year',         phrase: 'over the past year' },
   { id: '2025', label: 'Since Jan 2025', phrase: 'since Jan 2025' },
-  { id: '2019', label: 'Pre-Pandemic',   phrase: 'since Dec 2019' },
+  { id: '2019', label: '2019',           phrase: 'since Dec 2019' },
   { id: '2000', label: 'Since 2000',     phrase: 'since 2000' },
   { id: 'max',  label: 'Max',            phrase: 'all-time' },
 ];
@@ -396,7 +396,7 @@ function buildFactText(item, opts = {}) {
   const dir = (v) => v >= 0 ? 'up' : 'down';
   const clauses = [];
   if (b25 != null) clauses.push(`${dir(b25)} ${Math.abs(b25).toFixed(1)}% since January 2025`);
-  if (b19 != null) clauses.push(`${dir(b19)} ${Math.abs(b19).toFixed(1)}% since before the pandemic (Dec 2019)`);
+  if (b19 != null) clauses.push(`${dir(b19)} ${Math.abs(b19).toFixed(1)}% since December 2019`);
   const changePart = clauses.length ? ` — ${clauses.join(', ')}` : '';
   const level = isDollar && item.latest_value != null
     ? `${name}: ${fmtVal(item.latest_value, item.units)} (${fmtDate(item.latest_date)})`
@@ -404,7 +404,8 @@ function buildFactText(item, opts = {}) {
   const src = item.fred_id
     ? `${item.source_note || 'FRED'} series ${item.fred_id}`
     : (item.source_note || 'federal data');
-  return `${level}${changePart}. Source: ${src}, via the Economic Security Project Affordability Tracker.`;
+  const realNote = opts.realYear ? ` (inflation-adjusted to ${opts.realYear} dollars, CPI-U)` : '';
+  return `${level}${changePart}${realNote}. Source: ${src}, via the Economic Security Project Affordability Tracker.`;
 }
 
 // Lazy loader for the split state payloads (data/states/*.js and
@@ -453,6 +454,46 @@ const PAPER = '#FBF7EE';
 const INK = '#0E1320';
 const MUTE = '#6B6E78';
 const SOFT = '#9A9CA3';
+
+// ── Real (inflation-adjusted) transform ─────────────────────────────────────
+// One global Nominal/Real switch drives the whole page. "Real" deflates a
+// series by CPI-U (all items) and re-expresses it in the latest month's
+// dollars, the standard construction (same as our derived real-wage series):
+//   real_t = nominal_t × CPI_latest / CPI_t
+// so the newest point is unchanged and earlier points rise into today's
+// dollars. Only dollar levels and price *indexes* can be deflated; rates (%),
+// durations and counts are already normalized over time, so Real is a no-op for
+// them. A few series arrive already inflation-adjusted (Census real income; our
+// derived real earnings) — never double-deflate those.
+const ALREADY_REAL_IDS = new Set(['income', 'us_median_income', 'real_hourly_earnings']);
+function isDeflatable(item) {
+  if (!item) return false;
+  if (item.already_real || ALREADY_REAL_IDS.has(item.id)) return false;
+  const u = item.units || '';
+  return u.includes('$') || /^Index/.test(u);
+}
+function toReal(series, cpi) {
+  if (!series || !series.length || !cpi || !cpi.length) return series;
+  const cpiLatest = cpi[cpi.length - 1].value;
+  const byMonth = {};
+  for (const p of cpi) byMonth[p.date.slice(0, 7)] = p.value;
+  const deflAt = (date) => {
+    const hit = byMonth[date.slice(0, 7)];
+    if (hit != null) return hit;
+    // nearest CPI observation on or before this date (cpi is sorted ascending)
+    let best = null;
+    for (const p of cpi) { if (p.date <= date) best = p.value; else break; }
+    return best;
+  };
+  return series
+    .map(d => { const c = deflAt(d.date); return c ? { date: d.date, value: d.value * (cpiLatest / c) } : null; })
+    .filter(Boolean);
+}
+// Apply the global price type to a chart item's series, in place of item.data.
+// Returns the (possibly deflated) array. `real` is priceType === 'real'.
+function seriesForType(item, cpi, real) {
+  return (real && isDeflatable(item)) ? toReal(item.data, cpi) : item.data;
+}
 
 const CATEGORY_META = [
   { id: 'daily',     label: 'Daily items' },
@@ -631,14 +672,19 @@ const styles = {
 };
 
 // ── Copy-fact button (shared by all cards) ──────────────────────────────────
-function CopyFactButton({ item, factLabel }) {
+function CopyFactButton({ item, factLabel, priceType, cpiData }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
       style={{ ...styles.smallBtn, ...(copied ? { background: '#2E7D5B', borderColor: '#2E7D5B', color: PAPER } : {}) }}
       title="Copy a press-ready sentence with the latest numbers"
       onClick={async () => {
-        const text = buildFactText(item, { factLabel });
+        // Match the copied sentence to what's on screen: deflate first in real
+        // mode so the % changes line up with the chart the reader is seeing.
+        const realOn = priceType === 'real' && isDeflatable(item);
+        const factItem = realOn ? { ...item, data: toReal(item.data, cpiData) } : item;
+        const realYear = realOn && cpiData && cpiData.length ? cpiData[cpiData.length - 1].date.slice(0, 4) : null;
+        const text = buildFactText(factItem, { factLabel, realYear });
         try {
           await navigator.clipboard.writeText(text);
           setCopied(true);
@@ -655,7 +701,7 @@ function CopyFactButton({ item, factLabel }) {
 // Transparent background, soft area fill, hover tooltip. `overlayItem` draws
 // a dashed national-comparison line (used on state cards). `displayMode`
 // 'pct' rebases everything to cumulative % change since the anchor.
-function ChartCard({ item, anchorId, displayMode, overlayItem, factLabel }) {
+function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayItem, factLabel }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
   const cardRef = useRef(null);
@@ -672,8 +718,10 @@ function ChartCard({ item, anchorId, displayMode, overlayItem, factLabel }) {
   // Index series always display as % change; everything else follows the
   // global $/% toggle.
   const asPct = item.rebase || displayMode === 'pct';
+  const real = priceType === 'real';
+  const srcData = seriesForType(item, cpiData, real);
 
-  const visibleData = sliceFrom(item.data, cardSince);
+  const visibleData = sliceFrom(srcData, cardSince);
   const v0 = (asPct && visibleData.length) ? visibleData[0].value : null;
   const toPct = (data, base) => data.map(d => ({ date: d.date, value: base ? (d.value / base - 1) * 100 : 0 }));
   const displayData = asPct ? toPct(visibleData, v0) : visibleData;
@@ -682,10 +730,11 @@ function ChartCard({ item, anchorId, displayMode, overlayItem, factLabel }) {
     : item.units;
   const headlineVal = asPct
     ? (displayData.length ? displayData[displayData.length - 1].value : 0)
-    : item.latest_value;
+    : (visibleData.length ? visibleData[visibleData.length - 1].value : item.latest_value);
 
-  // Optional national overlay, transformed the same way
-  const overlayVisible = overlayItem ? sliceFrom(overlayItem.data, cardSince) : null;
+  // Optional national overlay, transformed the same way (deflated too in real)
+  const overlaySrc = overlayItem ? seriesForType(overlayItem, cpiData, real) : null;
+  const overlayVisible = overlaySrc ? sliceFrom(overlaySrc, cardSince) : null;
   const o0 = (asPct && overlayVisible && overlayVisible.length) ? overlayVisible[0].value : null;
   const overlayDisplay = overlayVisible
     ? (asPct ? toPct(overlayVisible, o0) : overlayVisible)
@@ -811,16 +860,16 @@ function ChartCard({ item, anchorId, displayMode, overlayItem, factLabel }) {
     return () => {
       if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
     };
-  }, [chartReady, item, cardSince, accent, displayMode, overlayItem]);
+  }, [chartReady, item, cardSince, accent, displayMode, priceType, overlayItem]);
 
-  const change = pctChange(item.data, cardSince);
+  const change = pctChange(srcData, cardSince);
   const up = change != null && change >= 0;
   const bad = item.invert_color ? !up : up;
   const changeColorFor = (v) => (item.invert_color ? v < 0 : v >= 0) ? WARM_RED : '#2E7D5B';
 
   // The two message anchors, always visible regardless of the active range
-  const b25 = pctChange(item.data, '2025-01-01');
-  const b19 = pctChange(item.data, '2019-12-01');
+  const b25 = pctChange(srcData, '2025-01-01');
+  const b19 = pctChange(srcData, '2019-12-01');
   const badge = (v, lbl) => v == null ? null : (
     <span key={lbl} style={{ whiteSpace: 'nowrap' }}>
       <span style={{ color: MUTE }}>{lbl} </span>
@@ -883,7 +932,7 @@ function ChartCard({ item, anchorId, displayMode, overlayItem, factLabel }) {
           border: `1px solid rgba(27,42,78,.08)`, borderRadius: 4,
         }}>
           {badge(b25, "Since Jan '25")}
-          {badge(b19, 'Since pre-pandemic')}
+          {badge(b19, "Since Dec '19")}
         </div>
       )}
 
@@ -949,7 +998,7 @@ function ChartCard({ item, anchorId, displayMode, overlayItem, factLabel }) {
           <span>{item.source_note || 'Derived from public data'}</span>
         )}
         <span style={{ display: 'flex', gap: 8, alignItems: 'center' }} data-export-hide>
-          <CopyFactButton item={item} factLabel={factLabel} />
+          <CopyFactButton item={item} factLabel={factLabel} priceType={priceType} cpiData={cpiData} />
           <button
             onClick={() => downloadCSV(item)}
             style={styles.smallBtn}
@@ -978,20 +1027,24 @@ function ChartCard({ item, anchorId, displayMode, overlayItem, factLabel }) {
 }
 
 // ── YoY heatmap with cumulative anchor columns ──────────────────────────────
-function Heatmap({ items }) {
+function Heatmap({ items, priceType, cpiData }) {
   const years = [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026];
+  const real = priceType === 'real';
 
-  const matrix = items.map(item => ({
-    item,
-    cells: years.map(yr => {
-      const cur = valueAt(item.data, `${yr}-01-15`);
-      const prior = valueAt(item.data, `${yr - 1}-01-15`);
-      if (!cur || !prior) return null;
-      return ((cur - prior) / prior) * 100;
-    }),
-    cum19: pctChange(item.data, '2019-12-01'),
-    cum25: pctChange(item.data, '2025-01-01'),
-  }));
+  const matrix = items.map(item => {
+    const d = seriesForType(item, cpiData, real);
+    return {
+      item,
+      cells: years.map(yr => {
+        const cur = valueAt(d, `${yr}-01-15`);
+        const prior = valueAt(d, `${yr - 1}-01-15`);
+        if (!cur || !prior) return null;
+        return ((cur - prior) / prior) * 100;
+      }),
+      cum19: pctChange(d, '2019-12-01'),
+      cum25: pctChange(d, '2025-01-01'),
+    };
+  });
 
   const colorScaled = (v, span) => {
     if (v == null) return BEIGE;
@@ -1143,7 +1196,8 @@ function HoursToAfford({ data }) {
 }
 
 // ── National view ────────────────────────────────────────────────────────────
-function NationalView({ data, anchorId, displayMode }) {
+function NationalView({ data, anchorId, displayMode, priceType }) {
+  const cpiData = data.cpi_all_items ? data.cpi_all_items.data : null;
   const allItems = useMemo(
     () => Object.values(data).filter(i => !i.overlay_only),
     [data]
@@ -1261,7 +1315,8 @@ function NationalView({ data, anchorId, displayMode }) {
                   borderRight: col < 1 ? `1px solid rgba(27,42,78,.14)` : 'none',
                   borderBottom: row < lastRow ? `1px solid rgba(27,42,78,.14)` : 'none',
                 }}>
-                  <ChartCard item={item} anchorId={anchorId} displayMode={displayMode} />
+                  <ChartCard item={item} anchorId={anchorId} displayMode={displayMode}
+                             priceType={priceType} cpiData={cpiData} />
                 </div>
               );
             })}
@@ -1274,7 +1329,7 @@ function NationalView({ data, anchorId, displayMode }) {
           <span className="at-section-dek" style={styles.sectionDek}>YoY % change each January, plus the two anchors, for the metrics you've selected.</span>
         </div>
         <div className="at-heatmap-scroll">
-          <Heatmap items={selectedItems} />
+          <Heatmap items={selectedItems} priceType={priceType} cpiData={cpiData} />
         </div>
       </div>
     </React.Fragment>
@@ -1288,7 +1343,8 @@ function fmtAnnual(value, units) {
   return Number(value).toLocaleString();
 }
 
-function StateView({ data, code, setCode, anchorId, displayMode }) {
+function StateView({ data, code, setCode, anchorId, displayMode, priceType }) {
+  const cpiData = data.cpi_all_items ? data.cpi_all_items.data : null;
   const idx = window.AFFORDABILITY_STATES;
   const [status, setStatus] = useState('loading');
 
@@ -1360,6 +1416,7 @@ function StateView({ data, code, setCode, anchorId, displayMode }) {
         source_note: m.source_label,
         rebase: m.rebase,
         invert_color: m.invert_color,
+        already_real: ALREADY_REAL_IDS.has(m.id),
         latest_value: sm.latest_value,
         latest_date: sm.latest_date,
         data: sm.data,
@@ -1394,6 +1451,7 @@ function StateView({ data, code, setCode, anchorId, displayMode }) {
                 borderBottom: row < lastRow ? `1px solid rgba(27,42,78,.14)` : 'none',
               }}>
                 <ChartCard item={item} anchorId={anchorId} displayMode={displayMode}
+                           priceType={priceType} cpiData={cpiData}
                            overlayItem={overlay} factLabel={factLabel} />
               </div>
             );
@@ -1537,8 +1595,9 @@ function CompareChart({ metric, seriesList, anchorId, displayMode }) {
   );
 }
 
-function CompareView({ data, metricId, setMetricId, homeState, anchorId, displayMode }) {
+function CompareView({ data, metricId, setMetricId, homeState, anchorId, displayMode, priceType }) {
   const idx = window.AFFORDABILITY_STATES;
+  const cpiData = data.cpi_all_items ? data.cpi_all_items.data : null;
   const [status, setStatus] = useState('loading');
   const [pinned, setPinned] = useState(() => [homeState].filter(Boolean));
   const [sortBy, setSortBy] = useState('az');
@@ -1569,17 +1628,23 @@ function CompareView({ data, metricId, setMetricId, homeState, anchorId, display
 
   const anchorD = anchorDate(anchorId, null);
   const asPct = metric.rebase || displayMode === 'pct';
+  // One global switch: deflate every state's series (and the US line) when the
+  // metric is a dollar/index measure. No state CPI exists, so state values are
+  // deflated by the national CPI-U — the standard fallback.
+  const metricReal = priceType === 'real' && isDeflatable({ id: metric.id, units: metric.units });
+  const deflate = (arr) => metricReal ? toReal(arr, cpiData) : arr;
 
   let rows = [];
   if (md) {
     rows = Object.keys(md.states).map(code => {
       const s = md.states[code];
+      const d = deflate(s.data);
       return {
         code,
         name: names[code] || code,
-        latest: s.latest_value,
-        change: pctChange(s.data, anchorId === 'max' ? s.data[0].date : anchorD),
-        data: s.data,
+        latest: d.length ? d[d.length - 1].value : s.latest_value,
+        change: pctChange(d, anchorId === 'max' ? d[0].date : anchorD),
+        data: d,
       };
     });
     rows.sort(sortBy === 'az'
@@ -1590,10 +1655,10 @@ function CompareView({ data, metricId, setMetricId, homeState, anchorId, display
   // Overlay chart series: US national (dashed) + pinned states
   const seriesList = [];
   const natItem = metric.national_id && data[metric.national_id];
-  if (natItem) seriesList.push({ label: 'US', color: hexToRgba(NAVY, 0.75), dashed: true, data: natItem.data });
+  if (natItem) seriesList.push({ label: 'US', color: hexToRgba(NAVY, 0.75), dashed: true, data: deflate(natItem.data) });
   pinned.forEach((code, i) => {
     const s = md && md.states[code];
-    if (s) seriesList.push({ label: names[code] || code, color: PIN_COLORS[i % PIN_COLORS.length], data: s.data });
+    if (s) seriesList.push({ label: names[code] || code, color: PIN_COLORS[i % PIN_COLORS.length], data: deflate(s.data) });
   });
 
   const changeColorFor = (v) => v == null ? MUTE : (metric.invert_color ? v < 0 : v >= 0) ? WARM_RED : '#2E7D5B';
@@ -1671,7 +1736,7 @@ function CompareView({ data, metricId, setMetricId, homeState, anchorId, display
               </select>
             </div>
 
-            <div style={{ background: PAPER, border: `1px solid rgba(27,42,78,.16)`, padding: '18px 20px 12px' }}>
+            <div style={{ background: 'transparent', borderTop: `2px solid ${metric.color}`, padding: '18px 2px 12px' }}>
               {seriesList.length === 0 ? (
                 <div style={{ padding: '60px 0', textAlign: 'center', fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE }}>
                   Add a state to draw the comparison.
@@ -1755,13 +1820,16 @@ function parseHash() {
 function AppMain({ data }) {
   const idx = window.AFFORDABILITY_STATES;
   const hash = useMemo(parseHash, []);
+  const realBaseYear = data.cpi_all_items && data.cpi_all_items.data.length
+    ? data.cpi_all_items.data[data.cpi_all_items.data.length - 1].date.slice(0, 4) : '';
   const validState = (c) => idx && idx.states.some(s => s.code === c);
   const validMetric = (m) => idx && idx.metrics.some(x => x.id === m);
 
   const [view, setView] = useState(
     ['national', 'state', 'compare'].includes(hash.view) && (hash.view === 'national' || idx) ? hash.view : 'national');
-  const [anchorId, setAnchorId] = useState(ANCHORS.some(a => a.id === hash.anchor) ? hash.anchor : '2025');
+  const [anchorId, setAnchorId] = useState(ANCHORS.some(a => a.id === hash.anchor) ? hash.anchor : '2019');
   const [displayMode, setDisplayMode] = useState(hash.mode === 'pct' ? 'pct' : 'level');
+  const [priceType, setPriceType] = useState(hash.type === 'real' ? 'real' : 'nominal');
   const [stateCode, setStateCode] = useState(validState(hash.state) ? hash.state : 'CA');
   const [metricId, setMetricId] = useState(validMetric(hash.metric) ? hash.metric : (idx && idx.metrics[0] ? idx.metrics[0].id : 'unemployment'));
 
@@ -1769,10 +1837,11 @@ function AppMain({ data }) {
   useEffect(() => {
     const parts = [`view=${view}`, `anchor=${anchorId}`];
     if (displayMode === 'pct') parts.push('mode=pct');
+    if (priceType === 'real') parts.push('type=real');
     if (view === 'state') parts.push(`state=${stateCode}`);
     if (view === 'compare') { parts.push(`metric=${metricId}`); }
     window.history.replaceState(null, '', '#' + parts.join('&'));
-  }, [view, anchorId, displayMode, stateCode, metricId]);
+  }, [view, anchorId, displayMode, priceType, stateCode, metricId]);
 
   const lastUpdated = (() => {
     const stamps = Object.values(data).map(d => d.last_updated).filter(Boolean).sort();
@@ -1839,20 +1908,38 @@ function AppMain({ data }) {
             </button>
           ))}
         </div>
-        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={styles.controlLabel}>View</span>
-          <span style={{ display: 'flex' }}>
-            <button onClick={() => setDisplayMode('level')} style={styles.modeBtn(displayMode === 'level')}>$ levels</button>
-            <button onClick={() => setDisplayMode('pct')} style={styles.modeBtn(displayMode === 'pct')}>% change</button>
+        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={styles.controlLabel}>Type</span>
+            <span style={{ display: 'flex' }}>
+              <button onClick={() => setPriceType('nominal')} style={styles.modeBtn(priceType === 'nominal')}>Nominal</button>
+              <button onClick={() => setPriceType('real')} style={styles.modeBtn(priceType === 'real')}>Real</button>
+            </span>
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={styles.controlLabel}>View</span>
+            <span style={{ display: 'flex' }}>
+              <button onClick={() => setDisplayMode('level')} style={styles.modeBtn(displayMode === 'level')}>$ levels</button>
+              <button onClick={() => setDisplayMode('pct')} style={styles.modeBtn(displayMode === 'pct')}>% change</button>
+            </span>
           </span>
         </span>
       </div>
 
-      {view === 'national' && <NationalView data={data} anchorId={anchorId} displayMode={displayMode} />}
+      {priceType === 'real' && (
+        <div className="at-pad" style={{ padding: '10px 56px 0' }}>
+          <div style={{ fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', fontSize: 12.5, color: MUTE }}>
+            Real: dollar and price-index series are inflation-adjusted to {realBaseYear} dollars using CPI-U (all items).
+            Rates, counts, and already-real series (income) are shown as published. State series use the national CPI-U — no state price index exists.
+          </div>
+        </div>
+      )}
+
+      {view === 'national' && <NationalView data={data} anchorId={anchorId} displayMode={displayMode} priceType={priceType} />}
       {view === 'state'    && <StateView data={data} code={stateCode} setCode={setStateCode}
-                                         anchorId={anchorId} displayMode={displayMode} />}
+                                         anchorId={anchorId} displayMode={displayMode} priceType={priceType} />}
       {view === 'compare'  && <CompareView data={data} metricId={metricId} setMetricId={setMetricId}
-                                           homeState={stateCode} anchorId={anchorId} displayMode={displayMode} />}
+                                           homeState={stateCode} anchorId={anchorId} displayMode={displayMode} priceType={priceType} />}
 
       {/* Footer */}
       <div className="at-pad" style={{ padding: '0 56px 48px' }}>

@@ -24,9 +24,13 @@ they get updated once a year, by hand, when the sources publish.
 
 ## Sources and provenance (downloaded 2026-07-07)
 
+> **ACA premiums and the uninsured rate moved out of this folder.** They are
+> now full time series (national card + state metric), pulled by
+> `scripts/fetch_kff.py` into `data/kff/*.csv` — not single-value tiles. See
+> the project `CLAUDE.md`.
+
 | Indicator | Source file | Origin |
 |---|---|---|
-| ACA benchmark premium (2026) | `kff_benchmark_premiums.csv` | KFF State Health Facts, "Marketplace Average Benchmark Premiums". Extracted from the JSON embedded in the indicator page (KFF's CSV export is JS-only). Second-lowest-cost silver premium for a 40-year-old, county-weighted by plan selections. |
 | Infant child care price (2025) | `ccaoa_2025_center_infant.csv` | Child Care Aware of America, "Child Care in America: 2025 Price & Supply". Extracted from the report's Flourish table embeds (no machine-readable appendix exists). Annual center-based infant price. |
 | Household debt per capita (Q4 2025) | `area_report_by_year.xlsx` | NY Fed State-Level Household Debt Statistics (Feb 2026 release), Consumer Credit Panel / Equifax. |
 | Credit card delinquency 90+ (Q4 2025) | `area_report_by_year.xlsx` | Same file, `creditcard_delinq` sheet — percent of balance 90+ days delinquent. |
