@@ -46,7 +46,24 @@
     .at-section-head { flex-wrap: wrap !important; }
     .at-section-dek { margin-left: 0 !important; flex-basis: 100% !important; }
   }
+
+  /* Embed mode (?embed=1): the dashboard sits in an iframe on the ESP site,
+     which supplies its own header. White page, no dark surround/shadow.
+     height:100% / min-height must come off in embed mode: the ESP height
+     script measures document.body, and a body pinned to the iframe height
+     could only ever grow, never shrink back on view switches. */
+  html.embed, html.embed body { height: auto; }
+  html.embed body { background: #FFFFFF; }
+  html.embed #root { background: #FFFFFF; min-height: 0; }
+  html.embed #stage { background: #FFFFFF; box-shadow: none; }
 </style>
+
+<script>
+  // Set before first paint so embed pages never flash the dark standalone chrome.
+  if (new URLSearchParams(window.location.search).has('embed')) {
+    document.documentElement.classList.add('embed');
+  }
+</script>
 </head>
 <body>
 
@@ -516,6 +533,13 @@ const INK = '#0E1320';
 const MUTE = '#6B6E78';
 const SOFT = '#9A9CA3';
 
+// Embed mode (?embed=1): iframe on the ESP site, which brings its own header.
+// The navy topper is dropped, the view tabs move into a light menu bar, the
+// menu bars go #F4F2E4 and the chart area goes white (comms/dev request).
+const EMBED = document.documentElement.classList.contains('embed');
+const MENU_BG = EMBED ? '#F4F2E4' : PAPER;
+const PAGE_BG = EMBED ? '#FFFFFF' : BEIGE;
+
 // ── Real (inflation-adjusted) transform ─────────────────────────────────────
 // One global Nominal/Real switch drives the whole page. "Real" deflates a
 // series by CPI-U (all items) and re-expresses it in the latest month's
@@ -637,7 +661,7 @@ function hexToRgba(hex, alpha) {
 
 const styles = {
   root: {
-    width: '100%', minHeight: 1700, background: BEIGE, color: INK,
+    width: '100%', minHeight: EMBED ? 0 : 1700, background: PAGE_BG, color: INK,
     fontFamily: '"Public Sans", system-ui, sans-serif',
     overflowX: 'hidden',
   },
@@ -671,7 +695,7 @@ const styles = {
     fontStyle: 'italic',
   },
   controls: {
-    background: PAPER, borderBottom: `1px solid rgba(27,42,78,.18)`,
+    background: MENU_BG, borderBottom: `1px solid rgba(27,42,78,.18)`,
     padding: '16px 56px',
     display: 'flex', alignItems: 'center', gap: 20,
   },
@@ -690,6 +714,17 @@ const styles = {
     cursor: 'pointer',
     transition: 'all .15s',
     boxShadow: active ? '0 2px 0 rgba(0,0,0,.18)' : 'none',
+  }),
+  // Embed-mode variant: the tabs sit on the light menu bar, not the navy hero.
+  viewTabLight: (active) => ({
+    fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+    fontSize: 15, fontWeight: active ? 700 : 600,
+    background: active ? NAVY : 'transparent',
+    color: active ? PAPER : NAVY,
+    border: `1.5px solid ${active ? NAVY : 'rgba(27,42,78,.35)'}`,
+    padding: '12px 22px',
+    cursor: 'pointer',
+    transition: 'all .15s',
   }),
   anchorBtn: (active) => ({
     fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
@@ -1412,7 +1447,7 @@ function NationalView({ data, anchorId, displayMode, priceType }) {
     <React.Fragment>
       {/* Selection chips, grouped by category with family colors */}
       <div className="at-pad" style={{
-        background: PAPER, borderBottom: `1px solid rgba(27,42,78,.18)`,
+        background: MENU_BG, borderBottom: `1px solid rgba(27,42,78,.18)`,
         padding: '16px 56px 18px',
         display: 'flex', flexDirection: 'column', gap: 10,
       }}>
@@ -1583,7 +1618,7 @@ function StateView({ data, code, setCode, anchorId, displayMode, priceType }) {
 
   const picker = (
     <div className="at-pad" style={{
-      background: PAPER, borderBottom: `1px solid rgba(27,42,78,.18)`,
+      background: MENU_BG, borderBottom: `1px solid rgba(27,42,78,.18)`,
       padding: '16px 56px',
       display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
     }}>
@@ -2219,7 +2254,7 @@ function CompareView({ data, metricIds, setMetricIds, homeState, anchorId, displ
     <React.Fragment>
       {/* Metric picker */}
       <div className="at-pad" style={{
-        background: PAPER, borderBottom: `1px solid rgba(27,42,78,.18)`,
+        background: MENU_BG, borderBottom: `1px solid rgba(27,42,78,.18)`,
         padding: '16px 56px',
         display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
       }}>
@@ -2380,7 +2415,7 @@ function MapView({ data, metricId, setMetricId, anchorId, priceType, displayMode
     <React.Fragment>
       {/* Measure picker — single-select: the map shows one metric at a time */}
       <div className="at-pad" style={{
-        background: PAPER, borderBottom: `1px solid rgba(27,42,78,.18)`,
+        background: MENU_BG, borderBottom: `1px solid rgba(27,42,78,.18)`,
         padding: '16px 56px',
         display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
       }}>
@@ -2561,16 +2596,19 @@ function AppMain({ data }) {
 
   return (
     <div style={styles.root}>
-      {/* Top bar */}
-      <div className="at-pad" style={styles.topbar}>
-        <span>Economic Security Project</span>
-        <a href="about.html" style={{
-          color: PAPER, textDecoration: 'none',
-          borderBottom: '1px dotted rgba(244,236,216,.5)', paddingBottom: 1,
-        }}>About the data →</a>
-      </div>
+      {/* Standalone chrome: navy top bar + hero. Hidden in embed mode — the
+          ESP site header takes their place and the tabs move below. */}
+      {!EMBED && (
+        <div className="at-pad" style={styles.topbar}>
+          <span>Economic Security Project</span>
+          <a href="about.html" style={{
+            color: PAPER, textDecoration: 'none',
+            borderBottom: '1px dotted rgba(244,236,216,.5)', paddingBottom: 1,
+          }}>About the data →</a>
+        </div>
+      )}
 
-      {/* Hero */}
+      {!EMBED && (
       <header className="at-pad at-hero" style={styles.hero}>
         <div style={styles.kicker}>The Affordability Tracker · {(new Date()).getFullYear()}</div>
         <h1 className="at-h1" style={styles.h1}>What's gotten<br/>more expensive.</h1>
@@ -2600,6 +2638,34 @@ function AppMain({ data }) {
           ))}
         </div>
       </header>
+      )}
+
+      {/* Embed mode: view tabs on a light bar where the hero used to be */}
+      {EMBED && (
+        <div className="at-pad" style={{
+          background: MENU_BG, borderBottom: '1px solid rgba(27,42,78,.12)',
+          padding: '18px 56px 16px',
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+        }}>
+          {VIEWS.map(v => (
+            <button key={v.id} onClick={() => setView(v.id)} style={styles.viewTabLight(view === v.id)}>
+              {v.label}
+            </button>
+          ))}
+          {lastUpdated && (
+            <span style={{
+              marginLeft: 'auto',
+              fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+              fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase',
+              color: MUTE, fontWeight: 600,
+            }}>
+              Updated {new Date(lastUpdated + 'T12:00:00').toLocaleDateString('en-US', {
+                year: 'numeric', month: 'long', day: 'numeric',
+              })}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Global controls: anchor + $/% */}
       <div className="at-pad at-controls" style={styles.controls}>
@@ -2687,8 +2753,10 @@ window.AppMain = AppMain;
       return () => clearInterval(t);
     }, [ready]);
 
-    if (!data) return <div style={{ color: '#F4ECD8', padding: 40, fontFamily: 'system-ui' }}>No data loaded.</div>;
-    if (!ready) return <div style={{ color: '#F4ECD8', padding: 40, fontFamily: 'system-ui' }}>Loading…</div>;
+    // Cream text on the dark standalone surround; ink on the white embed page.
+    const loadColor = document.documentElement.classList.contains('embed') ? '#0E1320' : '#F4ECD8';
+    if (!data) return <div style={{ color: loadColor, padding: 40, fontFamily: 'system-ui' }}>No data loaded.</div>;
+    if (!ready) return <div style={{ color: loadColor, padding: 40, fontFamily: 'system-ui' }}>Loading…</div>;
 
     const Main = window.AppMain;
     return (
@@ -2699,6 +2767,53 @@ window.AppMain = AppMain;
   }
 
   ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+})();
+</script>
+
+<script>
+(function () {
+  let previousHeight = 0;
+  function sendDashboardHeight() {
+    const bodyElements = Array.from(document.body.children).filter(
+      function (element) {
+        return element.tagName !== "SCRIPT" &&
+               element.tagName !== "STYLE";
+      }
+    );
+    const contentBottom = bodyElements.reduce(
+      function (largestBottom, element) {
+        const rectangle = element.getBoundingClientRect();
+        const bottom = rectangle.bottom + window.scrollY;
+        return Math.max(largestBottom, bottom);
+      },
+      0
+    );
+    const height = Math.ceil(
+      Math.max(contentBottom, document.body.offsetHeight)
+    );
+    if (Math.abs(height - previousHeight) > 2) {
+      previousHeight = height;
+      window.parent.postMessage(
+        {
+          type: "esp-dashboard-height",
+          height: height
+        },
+        "*"
+      );
+    }
+  }
+  window.addEventListener("load", sendDashboardHeight);
+  window.addEventListener("resize", sendDashboardHeight);
+  window.addEventListener("hashchange", function () {
+    setTimeout(sendDashboardHeight, 100);
+  });
+  const resizeObserver = new ResizeObserver(function () {
+    window.requestAnimationFrame(sendDashboardHeight);
+  });
+  resizeObserver.observe(document.body);
+  setTimeout(sendDashboardHeight, 100);
+  setTimeout(sendDashboardHeight, 500);
+  setTimeout(sendDashboardHeight, 1500);
 })();
 </script>
 

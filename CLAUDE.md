@@ -134,6 +134,13 @@ loudly when absent).
   and has Copy-fact / CSV / PNG buttons.
 - Deep links via the URL hash: `#view=state&state=IL&anchor=2019&type=real`
   (`view=map&metric=rent` for the map tab; `state=US` is valid).
+- Embed mode via the query string (`?embed=1`, composes with any hash): for
+  the iframe on the ESP site, which brings its own header. Hides the navy
+  topbar + hero, moves the view tabs into a light bar, menu bars go
+  `#F4F2E4`, page/chart background goes white, and `height:100%`/min-heights
+  come off `body`/`#root` so the height-postMessage script at the bottom of
+  the page (`esp-dashboard-height`, consumed by the ESP parent page — see
+  DEPLOYMENT.md) can shrink as well as grow. Standalone design is untouched.
 - Index-unit series (`rebase: true`) always display as cumulative % change,
   never raw index points. The 2019 anchor is Dec 2019 (not 2020 — avoids COVID
   base effects). Don't change these without flagging it.

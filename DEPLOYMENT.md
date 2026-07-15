@@ -47,9 +47,15 @@ pieces fit together.
 
 ## Embedding on the ESP site
 
+Add `?embed=1` to the URL for the embed variant: the navy topper is dropped
+(the ESP site header takes its place), the view tabs move into a light menu
+bar, the menu bars render `#F4F2E4`, and the chart area goes white. Without
+the parameter the page keeps its standalone design.
+
 ```html
 <iframe
-  src="https://<your-pages-domain>/"
+  id="affordability-tracker"
+  src="https://<your-pages-domain>/?embed=1"
   title="Affordability Tracker"
   style="width:100%; border:0; min-height:1400px;"
   sandbox="allow-scripts allow-popups allow-downloads"
@@ -62,11 +68,23 @@ pieces fit together.
   for React/Chart.js. The page has no forms, no login, and no user data, so
   this costs nothing — but it means if the tracker's own code were ever
   compromised upstream, it couldn't read or write anything on ESP's origin.
-- `min-height` is a rough starting point; the page's real height varies with
-  how many cards are selected. If ESP's CMS supports it, a small
-  `postMessage`-based auto-resize script is a reasonable follow-up — not
-  built here since it'd need coordination with however the CMS embeds
-  iframes.
+- **Auto-resize:** the page posts its content height to the parent window
+  whenever it changes (view switches, cards toggled, window resized):
+  `{ type: "esp-dashboard-height", height: <px> }`. The ESP page listens and
+  sets the iframe height, e.g.:
+
+```html
+<script>
+  window.addEventListener("message", function (e) {
+    if (e.data && e.data.type === "esp-dashboard-height") {
+      document.getElementById("affordability-tracker").style.height =
+        e.data.height + "px";
+    }
+  });
+</script>
+```
+
+  `min-height` on the iframe is just the pre-resize fallback.
 
 ## Manual refresh (no waiting for the schedule)
 
