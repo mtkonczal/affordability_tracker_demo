@@ -141,14 +141,15 @@ function anchorDate(id, data) {
 // deterministic and needs no external library.
 async function downloadCardAsPNG({
   chartCanvas, item, accent, headlineText, changeText, changeColor, rangeLabel, legend,
+  chartH = 540, // taller charts (the Map view's all-states bar list) grow the card
 }) {
   if (document.fonts && document.fonts.ready) {
     try { await document.fonts.ready; } catch (e) {}
   }
 
-  // 2x for retina-grade output; final PNG is 1440 × 1080.
+  // 2x for retina-grade output; final PNG is 1440 × 1080 at the default chartH.
   const SCALE = 2;
-  const W = 1440, H = 1080;
+  const W = 1440, H = 1080 + (chartH - 540);
   const canvas = document.createElement('canvas');
   canvas.width  = W * SCALE;
   canvas.height = H * SCALE;
@@ -285,7 +286,7 @@ async function downloadCardAsPNG({
         img.src = chartUrl;
       });
       const chartX = padX, chartY = cardTop + 200;
-      const chartW = W - padX * 2, chartH = 540;
+      const chartW = W - padX * 2;
       ctx.drawImage(img, chartX, chartY, chartW, chartH);
     }
   }
@@ -2108,6 +2109,135 @@ function StateBarList({ metric, rows, pinned = [], onPick, periodLabel }) {
   );
 }
 
+// ── Map-view export helpers ─────────────────────────────────────────────────
+// The branded PNG exporter (downloadCardAsPNG) takes a canvas for its chart
+// slot. The choropleth is an SVG and the bar list is plain DOM, so each gets
+// rasterized onto an offscreen canvas first — drawn directly, no DOM-cloning
+// library (same reasoning as downloadCardAsPNG itself).
+
+// Choropleth → canvas: serialize the live SVG (fills are plain attributes,
+// no external fonts), draw it contained in the exporter's 1280×540 slot,
+// and add the level legend top-right.
+async function mapToExportCanvas(svgEl, scale, metric) {
+  const S = 2, W = 1280, H = 540;
+  const canvas = document.createElement('canvas');
+  canvas.width = W * S; canvas.height = H * S;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(S, S);
+  ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
+
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute('width', 975);
+  clone.setAttribute('height', 610);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(clone));
+  const img = new Image();
+  await new Promise((res) => { img.onload = res; img.onerror = res; img.src = url; });
+  const mh = H, mw = 975 * (mh / 610);
+  ctx.drawImage(img, (W - mw) / 2, 0, mw, mh);
+
+  const lw = 160, lh = 12, lx = W - lw - 10, ly = 16;
+  const grad = ctx.createLinearGradient(lx, 0, lx + lw, 0);
+  [0, 0.25, 0.5, 0.75, 1].forEach(t => grad.addColorStop(t, rampColor(t)));
+  ctx.fillStyle = grad; ctx.fillRect(lx, ly, lw, lh);
+  ctx.fillStyle = INK;
+  ctx.font = '600 13px "Inter Tight", system-ui, sans-serif';
+  ctx.textAlign = 'right'; ctx.fillText('≤ ' + fmtVal(scale.lo, metric.units), lx - 8, ly + 11);
+  ctx.textAlign = 'left';  ctx.fillText('≥ ' + fmtVal(scale.hi, metric.units), lx + lw + 8, ly + 11);
+  return canvas;
+}
+
+// Bar list → canvas: redraw the sorted rows (rank, name, bar, value) at a
+// readable row height; the exporter grows the card to fit via chartH.
+function barsToExportCanvas(rows, scale, metric) {
+  const S = 2, W = 1280, ROW = 24, PAD = 8;
+  const has = rows.filter(r => r.value != null && isFinite(r.value)).sort((a, b) => b.value - a.value);
+  const H = Math.max(has.length * ROW + PAD * 2, 100);
+  const canvas = document.createElement('canvas');
+  canvas.width = W * S; canvas.height = H * S;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(S, S);
+  ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
+
+  const max = has.length ? has[0].value : 1;
+  const rankX = 34, nameX = 44, barX = 290, barW = 850, valX = W - 10;
+  const DISPLAY = '"Inter Tight", system-ui, sans-serif';
+  has.forEach((r, i) => {
+    const y = PAD + i * ROW;
+    ctx.fillStyle = 'rgba(27,42,78,.06)';
+    ctx.fillRect(barX, y + 5, barW, ROW - 10);
+    ctx.fillStyle = scale.color(r.value);
+    ctx.fillRect(barX, y + 5, Math.max(max > 0 ? (r.value / max) * barW : 0, 2), ROW - 10);
+    ctx.fillStyle = SOFT;
+    ctx.font = `600 11px ${DISPLAY}`;
+    ctx.textAlign = 'right'; ctx.fillText(r.rank != null ? String(r.rank) : '', rankX, y + 17);
+    ctx.fillStyle = INK;
+    ctx.font = `600 13px ${DISPLAY}`;
+    ctx.textAlign = 'left'; ctx.fillText(r.name, nameX, y + 17);
+    ctx.font = `700 13px ${DISPLAY}`;
+    ctx.textAlign = 'right'; ctx.fillText(fmtVal(r.value, metric.units), valX, y + 17);
+  });
+  return { canvas, chartH: H };
+}
+
+// CSV of exactly what the map/bar chart shows: one row per state, the
+// selected year's value (each state's last reading in that year), sorted by
+// rank. When the Real toggle is on the values are the deflated ones on
+// screen — the header comment says so.
+function downloadStateYearCSV(metric, rows, year, isReal) {
+  const esc = (v) => `"${String(v).replace(/"/g, '""')}"`;
+  const sorted = rows.slice().sort((a, b) =>
+    (b.value ?? -Infinity) - (a.value ?? -Infinity) || a.name.localeCompare(b.name));
+  const header = 'state,code,value,units,observation_date,rank\n';
+  const body = sorted.map(r =>
+    [esc(r.name), r.code, r.value ?? '', esc(metric.units || ''), r.obsDate || '', r.rank ?? ''].join(',')).join('\n');
+  const sourceLine = `# ${metric.label} — all states, ${year}\n`
+    + `# ${metric.source_label || 'public data'}${metric.source_url ? `\n# Source: ${metric.source_url}` : ''}\n`
+    + (isReal ? '# Values are inflation-adjusted to latest-month dollars using the national CPI-U\n' : '');
+  const blob = new Blob([`${sourceLine}${header}${body}\n`], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${metric.id}-states-${year}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Footer bar with the CSV/PNG export buttons — same shape as the compare
+// panels' footer (source left, buttons right).
+function ExportFooter({ metric, onCSV, onPNG }) {
+  const hover = {
+    onMouseEnter: (e) => { e.currentTarget.style.background = NAVY; e.currentTarget.style.color = PAPER; },
+    onMouseLeave: (e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = NAVY; },
+  };
+  return (
+    <div style={{
+      fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+      fontSize: 9, color: SOFT, letterSpacing: '.1em',
+      textTransform: 'uppercase',
+      marginTop: 12, paddingTop: 8, borderTop: `1px solid rgba(27,42,78,.1)`,
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+    }}>
+      {metric.source_url ? (
+        <a href={metric.source_url} target="_blank" rel="noopener noreferrer"
+           style={{ color: SOFT, textDecoration: 'none', borderBottom: '1px dotted rgba(27,42,78,.3)' }}
+           onMouseEnter={(e) => { e.currentTarget.style.color = NAVY; }}
+           onMouseLeave={(e) => { e.currentTarget.style.color = SOFT; }}>
+          Source · {metric.source_label} ↗
+        </a>
+      ) : (
+        <span>Source · {metric.source_label || 'Derived from public data'}</span>
+      )}
+      <span style={{ display: 'flex', gap: 8, alignItems: 'center' }} data-export-hide>
+        <button onClick={onCSV} style={styles.smallBtn} {...hover}>↓ CSV</button>
+        <button onClick={onPNG} style={styles.smallBtn} {...hover}>↓ PNG</button>
+      </span>
+    </div>
+  );
+}
+
 // One overlay-chart panel (US average + pinned states) for one metric. The
 // multi-metric compare renders up to four of these side by side; the panel
 // reads the already-lazy-loaded window.STATE_METRIC payload.
@@ -2388,6 +2518,8 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
   const [chartKind, setChartKind] = useState('map');   // 'map' | 'bars'
   const [yearSel, setYearSel] = useState(null);         // null = latest available year
   const [chartMode, setChartMode] = useState('level');  // §02 pinned chart: 'level' | 'pct'
+  const graphicRef = useRef(null);      // §01 map/bar container, for PNG export
+  const pinnedChartRef = useRef(null);  // §02 chart container, for PNG export
   // Click-to-pin: clicking a state on the map adds it to the overlay chart
   // below (and outlines it on the map); clicking again removes it. Pins
   // survive metric switches so you can walk one set of states across metrics.
@@ -2455,6 +2587,7 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
         code,
         name: names[code] || code,
         value: obs ? obs.value : null,
+        obsDate: obs ? obs.date : null,
         obsLabel: obs ? (annual ? year : fmtDate(obs.date)) : null,
         rank: null, rankN: null,
       };
@@ -2469,6 +2602,64 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
   }
 
   const periodLabel = `${metric.label} — ${year || ''}${!annual && year && year === years[0] ? ' (latest month)' : ''}`;
+
+  // §01 exports: CSV is the selected year's per-state values as shown; PNG
+  // rasterizes whichever graphic is up (map or bar list) into the branded card.
+  const exportYearCSV = () => downloadStateYearCSV(metric, rows, year, metricReal);
+  const exportPanelPNG = async () => {
+    try {
+      const scale = makeLevelScale(rows.map(r => r.value));
+      let chartCanvas, chartH = 540;
+      if (chartKind === 'map') {
+        const svgEl = graphicRef.current ? graphicRef.current.querySelector('svg[viewBox="0 0 975 610"]') : null;
+        if (!svgEl) return;
+        chartCanvas = await mapToExportCanvas(svgEl, scale, metric);
+      } else {
+        const out = barsToExportCanvas(rows, scale, metric);
+        chartCanvas = out.canvas; chartH = out.chartH;
+      }
+      await downloadCardAsPNG({
+        chartCanvas, chartH,
+        item: {
+          id: `${metric.id}-states-${year}`,
+          label: metric.label,
+          eyebrow: `All States · ${year}`,
+          source_note: metric.source_label,
+        },
+        accent: metric.color,
+        headlineText: '', changeText: '', changeColor: metric.color,
+        rangeLabel: '', legend: null,
+      });
+    } catch (err) { console.error('PNG export failed', err); }
+  };
+
+  // §02 exports: CSV is the pinned states' full series (stored nominal values,
+  // matching every other multi-state export); PNG captures the chart canvas.
+  const exportPinnedCSV = () => {
+    if (!md) return;
+    downloadCompareCSV(metric, pinned
+      .map(code => md.states[code] ? { label: names[code] || code, data: md.states[code].data } : null)
+      .filter(Boolean));
+  };
+  const exportPinnedPNG = async () => {
+    try {
+      const chartCanvas = pinnedChartRef.current ? pinnedChartRef.current.querySelector('canvas') : null;
+      if (!chartCanvas) return;
+      await downloadCardAsPNG({
+        chartCanvas,
+        item: {
+          id: `${metric.id}-pinned-states`,
+          label: metric.label,
+          eyebrow: 'Pinned States',
+          source_note: metric.source_label,
+        },
+        accent: metric.color,
+        headlineText: '', changeText: '', changeColor: metric.color,
+        rangeLabel: anchorById(anchorId).phrase,
+        legend: pinned.map((code, i) => ({ label: names[code] || code, color: PIN_COLORS[i % PIN_COLORS.length] })),
+      });
+    } catch (err) { console.error('PNG export failed', err); }
+  };
 
   return (
     <React.Fragment>
@@ -2524,11 +2715,15 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
               </span>
             </div>
 
-            {chartKind === 'map' ? (
-              <USMap metric={metric} rows={rows} pinned={pinned} onPick={togglePin} periodLabel={periodLabel} />
-            ) : (
-              <StateBarList metric={metric} rows={rows} pinned={pinned} onPick={togglePin} periodLabel={periodLabel} />
-            )}
+            <div ref={graphicRef}>
+              {chartKind === 'map' ? (
+                <USMap metric={metric} rows={rows} pinned={pinned} onPick={togglePin} periodLabel={periodLabel} />
+              ) : (
+                <StateBarList metric={metric} rows={rows} pinned={pinned} onPick={togglePin} periodLabel={periodLabel} />
+              )}
+            </div>
+
+            <ExportFooter metric={metric} onCSV={exportYearCSV} onPNG={exportPanelPNG} />
 
             <div style={{
               marginTop: 14, fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic',
@@ -2612,7 +2807,7 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
                     style={{ ...styles.smallBtn, border: 'none', textDecoration: 'underline', textUnderlineOffset: 3, fontSize: 10 }}
                   >Clear all</button>
                 </div>
-                <div style={{ background: 'transparent', borderTop: `2px solid ${metric.color}`, padding: '14px 2px 10px' }}>
+                <div ref={pinnedChartRef} style={{ background: 'transparent', borderTop: `2px solid ${metric.color}`, padding: '14px 2px 10px' }}>
                   <CompareChart
                     metric={metric}
                     seriesList={pinned.map((code, i) => {
@@ -2628,6 +2823,7 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
                 }}>
                   Lines show {chartMode === 'pct' ? '% change' : 'levels'} {anchorById(anchorId).phrase}{metricReal ? ', inflation-adjusted with the national CPI-U (no state price index exists)' : ''}.
                 </div>
+                <ExportFooter metric={metric} onCSV={exportPinnedCSV} onPNG={exportPinnedPNG} />
               </React.Fragment>
             )}
           </React.Fragment>

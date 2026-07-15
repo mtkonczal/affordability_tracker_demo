@@ -115,7 +115,12 @@ loudly when absent).
   sienna, quantile-clamped domain). Time series live on the pinned-states
   chart below (§02), which shows levels (default) or %-change and carries
   its own anchor + Nominal/Real + View controls — the global controls bar
-  is hidden on this view. Rebase/index metrics (home prices) are excluded from the map
+  is hidden on this view. Both sections have CSV/PNG export footers: §01's
+  CSV is the selected year's per-state snapshot (as shown, so deflated when
+  Real is on) and its PNG rasterizes the SVG map or redraws the bar list
+  onto the branded card (`downloadCardAsPNG` takes a `chartH` override to
+  grow for the 51-row bar list); §02's CSV is the pinned states' full
+  nominal series via `downloadCompareCSV`, like the Compare panels. Rebase/index metrics (home prices) are excluded from the map
   picker because index levels aren't comparable across states. Defaults to
   the ACA benchmark premium).
 - Categories and chips/cards are ordered alphabetically (comms request);
