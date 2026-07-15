@@ -123,7 +123,7 @@ function anchorDate(id, data) {
 // CORS quirks). Drawing the chart canvas + text on a fresh canvas is
 // deterministic and needs no external library.
 async function downloadCardAsPNG({
-  chartCanvas, item, accent, headlineText, changeText, changeColor, rangeLabel,
+  chartCanvas, item, accent, headlineText, changeText, changeColor, rangeLabel, legend,
 }) {
   if (document.fonts && document.fonts.ready) {
     try { await document.fonts.ready; } catch (e) {}
@@ -217,8 +217,29 @@ async function downloadCardAsPNG({
   }
   ctx.fillText(item.label, padX, cardTop + 110);
 
-  // Subtitle
-  if (item.subtitle) {
+  // Subtitle — or, for multi-line compare exports, a color-dot legend
+  // (the chart canvas itself has no legend; the on-page chips play that role)
+  if (legend && legend.length) {
+    ctx.textAlign = 'left';
+    ctx.font = `600 20px ${DISPLAY}`;
+    let lx = padX;
+    const ly = cardTop + 148;
+    for (let i = 0; i < legend.length; i++) {
+      const entryW = 20 + ctx.measureText(legend[i].label).width + 28;
+      if (i > 0 && lx + entryW > W - padX) {
+        ctx.fillStyle = MUTE;
+        ctx.fillText(`+ ${legend.length - i} more`, lx, ly);
+        break;
+      }
+      ctx.fillStyle = legend[i].color;
+      ctx.beginPath();
+      ctx.arc(lx + 7, ly - 7, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = INK;
+      ctx.fillText(legend[i].label, lx + 20, ly);
+      lx += entryW;
+    }
+  } else if (item.subtitle) {
     ctx.fillStyle = MUTE;
     ctx.font = `italic 22px ${SERIF}`;
     ctx.fillText(item.subtitle, padX, cardTop + 145);
@@ -297,6 +318,33 @@ function downloadCSV(item) {
   const a = document.createElement('a');
   a.href = url;
   a.download = `${item.id}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Wide CSV for a Compare States panel: one date column, one column per
+// pinned state. Values are the stored (nominal) series, matching the
+// single-series exports — the Real toggle never changes what's exported.
+function downloadCompareCSV(metric, seriesList) {
+  const dates = Array.from(new Set(seriesList.flatMap(s => s.data.map(d => d.date)))).sort();
+  const cols = seriesList.map(s => {
+    const m = {};
+    s.data.forEach(d => { m[d.date] = d.value; });
+    return m;
+  });
+  const esc = (v) => `"${String(v).replace(/"/g, '""')}"`;
+  const header = ['date', ...seriesList.map(s => esc(s.label))].join(',') + '\n';
+  const body = dates.map(dt => [dt, ...cols.map(m => m[dt] ?? '')].join(',')).join('\n');
+  const sourceLine = `# ${metric.label}${metric.units ? ` (${metric.units})` : ''} — ${metric.source_label || 'public data'}\n`
+    + (metric.source_url ? `# Source: ${metric.source_url}\n` : '');
+  const csv = `${sourceLine}${header}${body}\n`;
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${metric.id}-states.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -437,6 +485,7 @@ function loadDataFile(src) {
 
 Object.assign(window, {
   ESP, fmtVal, fmtDate, ordinal, pctChange, valueAt, sliceFrom, downloadCSV, downloadCardAsPNG,
+  downloadCompareCSV,
   linePath, toPoints, hoursToAfford, REFERENCE_PRICES, scaleByCPI, categoryLabel,
   ANCHORS, anchorById, anchorDate, buildFactText, loadDataFile,
 });
@@ -454,6 +503,7 @@ Object.assign(window, {
 //   Map             — choropleth of all states, one measure at a time
 
 const { ESP, fmtVal, fmtDate, ordinal, pctChange, valueAt, sliceFrom, downloadCSV, downloadCardAsPNG,
+        downloadCompareCSV,
         linePath, toPoints, categoryLabel, hoursToAfford, REFERENCE_PRICES, scaleByCPI,
         ANCHORS, anchorById, anchorDate, buildFactText, loadDataFile } = window;
 const { useState, useMemo, useEffect, useRef } = React;
@@ -823,6 +873,18 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
     const yMin = Math.floor(dataMin / yStep) * yStep;
     const yMax = Math.ceil(dataMax / yStep) * yStep;
 
+    // Inset the time axis ~2.5% on each side so the line's endpoints (and
+    // their hover circles) sit inside the plot area instead of riding the
+    // chart edge and bleeding into the axis labels.
+    const ts = displayData.map(d => +new Date(d.date))
+      .concat(overlayDisplay ? overlayDisplay.map(d => +new Date(d.date)) : [])
+      .filter(Number.isFinite);
+    const tPad = ts.length > 1
+      ? Math.max((Math.max(...ts) - Math.min(...ts)) * 0.025, 86400000)
+      : 86400000;
+    const xMin = ts.length ? Math.min(...ts) - tPad : undefined;
+    const xMax = ts.length ? Math.max(...ts) + tPad : undefined;
+
     const datasets = [{
       label: item.label,
       data: displayData.map(d => ({ x: d.date, y: d.value })),
@@ -836,9 +898,11 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
       pointHoverBorderWidth: 2,
       tension: 0.32,
       fill: 'start',
-      // Don't clip to the plot area — hover circles on the first/last points
-      // were getting cut in half at the chart edges.
-      clip: false,
+      // Never draw past the plot area horizontally (the line and fill were
+      // bleeding into the axis labels); endpoints stay clear of the edges
+      // via the x-axis inset above. Small top allowance keeps hover circles
+      // at the series max from being cut.
+      clip: { left: 0, right: 0, top: 12, bottom: 0 },
     }];
     if (overlayDisplay && overlayDisplay.length) {
       datasets.push({
@@ -851,7 +915,7 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
         pointHoverRadius: 4,
         tension: 0.32,
         fill: false,
-        clip: false,
+        clip: { left: 0, right: 0, top: 12, bottom: 0 },
       });
     }
 
@@ -861,9 +925,7 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        // Left/right padding keeps unclipped hover circles on the endpoints
-        // from being cut by the canvas boundary.
-        layout: { padding: { top: 8, left: 8, right: 8 } },
+        layout: { padding: { top: 8 } },
         animation: { duration: 350, easing: 'easeOutQuart' },
         interaction: { intersect: false, mode: 'index' },
         plugins: {
@@ -888,6 +950,8 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
         scales: {
           x: {
             type: 'time',
+            min: xMin,
+            max: xMax,
             time: { unit: activeId === '1y' ? 'month' : 'year' },
             grid: { display: false },
             border: { display: false },
@@ -1271,6 +1335,12 @@ function HoursToAfford({ data }) {
 }
 
 // ── National view ────────────────────────────────────────────────────────────
+// Default card set (comms request, July 2026): a cross-category headline mix
+// rather than one whole category.
+const DEFAULT_NATIONAL_IDS = [
+  'car_insurance', 'aca_benchmark_premium', 'gas',
+  'credit_card_delinquency', 'eggs', 'real_hourly_earnings',
+];
 function NationalView({ data, anchorId, displayMode, priceType }) {
   const cpiData = data.cpi_all_items ? data.cpi_all_items.data : null;
   const allItems = useMemo(
@@ -1288,7 +1358,9 @@ function NationalView({ data, anchorId, displayMode, priceType }) {
   }, [allItems]);
 
   const [selectedIds, setSelectedIds] = useState(() =>
-    new Set(allItems.filter(i => i.category === 'daily').map(i => i.id))
+    // Intersect with what's actually in the payload so a renamed/dropped
+    // series can't leave a phantom selection.
+    new Set(allItems.filter(i => DEFAULT_NATIONAL_IDS.includes(i.id)).map(i => i.id))
   );
 
   // Collapsible category rows (41 chips was too busy): rows start collapsed,
@@ -1683,9 +1755,20 @@ function CompareChart({ metric, seriesList, anchorId, displayMode, height = 340 
         pointHoverRadius: 4,
         tension: 0.32,
         fill: false,
-        clip: false, // endpoint hover circles were half-clipped at the edges
+        // Clip at the plot area horizontally so lines never bleed into the
+        // axis labels; the x-axis inset below keeps endpoints (and their
+        // hover circles) clear of the edges.
+        clip: { left: 0, right: 0, top: 12, bottom: 0 },
       };
     });
+
+    // Same endpoint inset as the national cards: ~2.5% on each side.
+    const ts = datasets.flatMap(ds => ds.data.map(p => +new Date(p.x))).filter(Number.isFinite);
+    const tPad = ts.length > 1
+      ? Math.max((Math.max(...ts) - Math.min(...ts)) * 0.025, 86400000)
+      : 86400000;
+    const xMin = ts.length ? Math.min(...ts) - tPad : undefined;
+    const xMax = ts.length ? Math.max(...ts) + tPad : undefined;
 
     const displayUnits = asPct ? '%' : metric.units;
 
@@ -1695,7 +1778,7 @@ function CompareChart({ metric, seriesList, anchorId, displayMode, height = 340 
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        layout: { padding: { top: 8, left: 8, right: 8 } },
+        layout: { padding: { top: 8 } },
         animation: { duration: 350, easing: 'easeOutQuart' },
         interaction: { intersect: false, mode: 'index' },
         plugins: {
@@ -1715,6 +1798,8 @@ function CompareChart({ metric, seriesList, anchorId, displayMode, height = 340 
         scales: {
           x: {
             type: 'time',
+            min: xMin,
+            max: xMax,
             time: { unit: anchorId === '1y' ? 'month' : 'year' },
             grid: { display: false }, border: { display: false },
             ticks: { color: MUTE, font: { size: 10, family: 'Inter Tight, system-ui' }, maxTicksLimit: 7 },
@@ -1964,21 +2049,23 @@ function USMap({ metric, rows, pinned = [], onPick, anchorPhrase, mapMode }) {
 // multi-metric compare renders up to four of these side by side; the panel
 // reads the already-lazy-loaded window.STATE_METRIC payload.
 function CompareMetricPanel({ metric, data, pinned, names, anchorId, displayMode, priceType, cpiData, compact, failed }) {
+  const panelRef = useRef(null);
   const md = window.STATE_METRIC ? window.STATE_METRIC[metric.id] : null;
   const metricReal = priceType === 'real' && isDeflatable({ id: metric.id, units: metric.units });
   const deflate = (arr) => metricReal ? toReal(arr, cpiData) : arr;
 
   // The US average is not drawn by default — it's pinnable like any state
-  // (code 'US' reads the already-loaded national payload).
+  // (code 'US' reads the already-loaded national payload). `rawData` keeps
+  // the undeflated series for the CSV export.
   const seriesList = [];
   const natItem = metric.national_id && data[metric.national_id];
   if (md) pinned.forEach((code, i) => {
     const s = code === 'US' ? (natItem ? { data: natItem.data } : null) : md.states[code];
-    if (s) seriesList.push({ label: names[code] || code, color: PIN_COLORS[i % PIN_COLORS.length], data: deflate(s.data) });
+    if (s) seriesList.push({ label: names[code] || code, color: PIN_COLORS[i % PIN_COLORS.length], data: deflate(s.data), rawData: s.data });
   });
 
   return (
-    <div style={{ background: 'transparent', borderTop: `2px solid ${metric.color}`, padding: '14px 2px 10px', minWidth: 0 }}>
+    <div ref={panelRef} style={{ background: 'transparent', borderTop: `2px solid ${metric.color}`, padding: '14px 2px 10px', minWidth: 0 }}>
       {compact && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
           <span style={{ fontFamily: 'Publico, Georgia, serif', fontSize: 17, fontWeight: 600, color: INK }}>{metric.label}</span>
@@ -1986,12 +2073,7 @@ function CompareMetricPanel({ metric, data, pinned, names, anchorId, displayMode
             fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif', fontSize: 10, color: SOFT,
             textTransform: 'uppercase', letterSpacing: '.06em', textAlign: 'right',
           }}>
-            {metric.source_url ? (
-              <a href={metric.source_url} target="_blank" rel="noopener noreferrer"
-                 style={{ color: SOFT, textDecoration: 'none', borderBottom: '1px dotted rgba(27,42,78,.3)' }}>
-                {metric.source_label} ↗
-              </a>
-            ) : metric.source_label} · {metric.frequency}
+            {metric.frequency}
           </span>
         </div>
       )}
@@ -2010,6 +2092,68 @@ function CompareMetricPanel({ metric, data, pinned, names, anchorId, displayMode
       ) : (
         <CompareChart metric={metric} seriesList={seriesList} anchorId={anchorId}
                       displayMode={displayMode} height={compact ? 250 : 340} />
+      )}
+
+      {/* Footer — same shape as the national cards: source link left,
+          CSV/PNG export buttons right (no Copy-fact for multi-state panels) */}
+      {!failed && md && (
+        <div style={{
+          fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+          fontSize: 9, color: SOFT, letterSpacing: '.1em',
+          textTransform: 'uppercase',
+          marginTop: 12, paddingTop: 8, borderTop: `1px solid rgba(27,42,78,.1)`,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+        }}>
+          {metric.source_url ? (
+            <a
+              href={metric.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: SOFT, textDecoration: 'none', borderBottom: '1px dotted rgba(27,42,78,.3)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = NAVY; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = SOFT; }}
+            >
+              Source · {metric.source_label} ↗
+            </a>
+          ) : (
+            <span>Source · {metric.source_label || 'Derived from public data'}</span>
+          )}
+          {seriesList.length > 0 && (
+            <span style={{ display: 'flex', gap: 8, alignItems: 'center' }} data-export-hide>
+              <button
+                onClick={() => downloadCompareCSV(metric, seriesList.map(s => ({ label: s.label, data: s.rawData })))}
+                style={styles.smallBtn}
+                onMouseEnter={(e) => { e.currentTarget.style.background = NAVY; e.currentTarget.style.color = PAPER; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = NAVY; }}
+              >↓ CSV</button>
+              <button
+                onClick={async () => {
+                  const chartCanvas = panelRef.current?.querySelector('canvas');
+                  try {
+                    await downloadCardAsPNG({
+                      chartCanvas,
+                      item: {
+                        id: `${metric.id}-states`,
+                        label: metric.label,
+                        eyebrow: 'Compare States',
+                        source_note: metric.source_label,
+                      },
+                      accent: metric.color,
+                      headlineText: '',
+                      changeText: '',
+                      changeColor: metric.color,
+                      rangeLabel: anchorById(anchorId).phrase,
+                      legend: seriesList.map(s => ({ label: s.label, color: s.color })),
+                    });
+                  } catch (err) { console.error('PNG export failed', err); }
+                }}
+                style={styles.smallBtn}
+                onMouseEnter={(e) => { e.currentTarget.style.background = NAVY; e.currentTarget.style.color = PAPER; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = NAVY; }}
+              >↓ PNG</button>
+            </span>
+          )}
+        </div>
       )}
     </div>
   );
