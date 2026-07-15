@@ -2385,8 +2385,9 @@ function CompareView({ data, metricIds, setMetricIds, homeState, anchorId, displ
 function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType, setPriceType }) {
   const idx = window.AFFORDABILITY_STATES;
   const cpiData = data.cpi_all_items ? data.cpi_all_items.data : null;
-  const [chartKind, setChartKind] = useState('map'); // 'map' | 'bars'
-  const [yearSel, setYearSel] = useState(null);      // null = latest available year
+  const [chartKind, setChartKind] = useState('map');   // 'map' | 'bars'
+  const [yearSel, setYearSel] = useState(null);         // null = latest available year
+  const [chartMode, setChartMode] = useState('level');  // §02 pinned chart: 'level' | 'pct'
   // Click-to-pin: clicking a state on the map adds it to the overlay chart
   // below (and outlines it on the map); clicking again removes it. Pins
   // survive metric switches so you can walk one set of states across metrics.
@@ -2538,16 +2539,17 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
             </div>
 
             {/* Click-to-pin overlay chart: every state clicked on the map or
-                bar chart is drawn here as % change over time — the graphic
-                above shows levels, this is where change lives. The anchor +
-                Nominal/Real controls sit here (not on the global bar) because
-                in the Map view they only shape this chart. */}
+                bar chart is drawn here over time, as levels (default) or
+                % change — the graphic above is a single-period snapshot, this
+                is where time series live. The anchor + Nominal/Real + View
+                controls sit here (not on the global bar) because in the Map
+                view they only shape this chart. */}
             <div className="at-section-head" style={{ ...styles.sectionHead, marginTop: 44 }}>
               <span style={styles.sectionLabel}>§02</span>
               <span style={styles.sectionTitle}>
                 {pinned.length
                   ? `${metric.label} — ${pinned.length} ${pinned.length === 1 ? 'state' : 'states'} pinned`
-                  : 'Pin states to chart their change'}
+                  : 'Pin states to chart them over time'}
               </span>
               <span className="at-section-dek" style={styles.sectionDek}>
                 Click states above to add them; click a state or its chip to remove it.
@@ -2559,7 +2561,7 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
                 padding: '36px 32px', textAlign: 'center',
                 fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE,
               }}>
-                Click any state above to chart how it has changed over time.
+                Click any state above to chart it over time — levels or % change.
               </div>
             ) : (
               <React.Fragment>
@@ -2576,11 +2578,20 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
                       </button>
                     ))}
                   </div>
-                  <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={styles.controlLabel}>Type</span>
-                    <span style={{ display: 'flex' }}>
-                      <button onClick={() => setPriceType('nominal')} style={styles.modeBtn(priceType === 'nominal')}>Nominal</button>
-                      <button onClick={() => setPriceType('real')} style={styles.modeBtn(priceType === 'real')}>Real</button>
+                  <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={styles.controlLabel}>Type</span>
+                      <span style={{ display: 'flex' }}>
+                        <button onClick={() => setPriceType('nominal')} style={styles.modeBtn(priceType === 'nominal')}>Nominal</button>
+                        <button onClick={() => setPriceType('real')} style={styles.modeBtn(priceType === 'real')}>Real</button>
+                      </span>
+                    </span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={styles.controlLabel}>View</span>
+                      <span style={{ display: 'flex' }}>
+                        <button onClick={() => setChartMode('level')} style={styles.modeBtn(chartMode === 'level')}>Levels</button>
+                        <button onClick={() => setChartMode('pct')} style={styles.modeBtn(chartMode === 'pct')}>% change</button>
+                      </span>
                     </span>
                   </span>
                 </div>
@@ -2609,13 +2620,13 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
                       if (!s) return null;
                       return { label: names[code] || code, color: PIN_COLORS[i % PIN_COLORS.length], data: deflate(s.data) };
                     }).filter(Boolean)}
-                    anchorId={anchorId} displayMode="pct" height={340} />
+                    anchorId={anchorId} displayMode={chartMode} height={340} />
                 </div>
                 <div style={{
                   marginTop: 10, fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic',
                   fontSize: 12.5, color: MUTE,
                 }}>
-                  Lines show % change {anchorById(anchorId).phrase}{metricReal ? ', inflation-adjusted with the national CPI-U (no state price index exists)' : ''}.
+                  Lines show {chartMode === 'pct' ? '% change' : 'levels'} {anchorById(anchorId).phrase}{metricReal ? ', inflation-adjusted with the national CPI-U (no state price index exists)' : ''}.
                 </div>
               </React.Fragment>
             )}

@@ -112,10 +112,10 @@ loudly when absent).
   be, plus a year dropdown; within a year each state shows its last reading,
   so monthly/quarterly metrics default to the latest month. The sorted bar
   chart shares the map's warm sequential ramp (`LEVEL_RAMP`, sand → burnt
-  sienna, quantile-clamped domain). Change over time lives on the
-  pinned-states chart below (§02), which is always %-change and carries its
-  own anchor + Nominal/Real controls — the global controls bar is hidden on
-  this view. Rebase/index metrics (home prices) are excluded from the map
+  sienna, quantile-clamped domain). Time series live on the pinned-states
+  chart below (§02), which shows levels (default) or %-change and carries
+  its own anchor + Nominal/Real + View controls — the global controls bar
+  is hidden on this view. Rebase/index metrics (home prices) are excluded from the map
   picker because index levels aren't comparable across states. Defaults to
   the ACA benchmark premium).
 - Categories and chips/cards are ordered alphabetically (comms request);
