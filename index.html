@@ -517,7 +517,9 @@ Object.assign(window, {
 //   National        — every national series as selectable chart cards + heatmap
 //   My State        — all metrics for one state (US available as an option)
 //   Compare States  — 1–4 metrics, pinned states overlaid (US pinnable too)
-//   Map             — choropleth of all states, one measure at a time
+//   Map             — choropleth (or sorted bar chart) of all states, one
+//                     measure at a time, levels for a selected year; change
+//                     lives on its pinned-states chart
 
 const { ESP, fmtVal, fmtDate, ordinal, pctChange, valueAt, sliceFrom, downloadCSV, downloadCardAsPNG,
         downloadCompareCSV,
@@ -1862,13 +1864,49 @@ function CompareChart({ metric, seriesList, anchorId, displayMode, height = 340 
   );
 }
 
-// ── Choropleth map: one metric, all states ──────────────────────────────────
-// D3-geo + topojson-client + the pre-projected us-atlas states topology
-// (lazy-loaded from jsDelivr the first time the map is opened). Two color
-// modes: change since the active anchor (diverging, red = worse — flipped
-// for metrics where rising is good) and latest level (beige → navy).
+// ── Level color scale, shared by the choropleth and the bar chart ───────────
+// Warm sequential ramp for levels (light sand → burnt sienna), pre-sampled
+// from a Lab interpolation so it stays perceptually even without needing d3
+// — the bar chart can render before the map libs finish loading. Domain is
+// quantile-clamped at the 5th/95th percentile (legend says ≤ / ≥) so one
+// outlier state (usually DC) can't wash every other state into the light
+// end. Direction-neutral on purpose: dark = high, whatever high means.
+const LEVEL_RAMP = ['#f6e7cf','#e9ceb5','#dbb69b','#cc9f83','#bd876b','#ae7153','#9e5a3d','#8d4427','#7c2d12'];
+const MAP_NO_DATA = '#DBD8CE'; // neutral gray — distinct from the ramp's warm light end
+
+function rampColor(t) {
+  const x = Math.max(0, Math.min(1, t)) * (LEVEL_RAMP.length - 1);
+  const i = Math.min(Math.floor(x), LEVEL_RAMP.length - 2);
+  const f = x - i;
+  const ch = (h, k) => parseInt(h.slice(1 + k * 2, 3 + k * 2), 16);
+  const mix = (k) => Math.round(ch(LEVEL_RAMP[i], k) + f * (ch(LEVEL_RAMP[i + 1], k) - ch(LEVEL_RAMP[i], k)));
+  return `rgb(${mix(0)},${mix(1)},${mix(2)})`;
+}
+
+function quantileSorted(sorted, p) {
+  if (!sorted.length) return null;
+  const x = (sorted.length - 1) * p, i = Math.floor(x), f = x - i;
+  return i + 1 < sorted.length ? sorted[i] + f * (sorted[i + 1] - sorted[i]) : sorted[i];
+}
+
+function makeLevelScale(values) {
+  const vals = values.filter(v => v != null && isFinite(v)).sort((a, b) => a - b);
+  let lo = quantileSorted(vals, 0.05), hi = quantileSorted(vals, 0.95);
+  if (!(hi > lo)) { lo = vals.length ? vals[0] : 0; hi = vals.length ? vals[vals.length - 1] : 1; }
+  const color = (v) => {
+    if (v == null || !isFinite(v)) return MAP_NO_DATA;
+    return rampColor(hi > lo ? (v - lo) / (hi - lo) : 0.5);
+  };
+  const grad = `linear-gradient(90deg, ${[0, 0.25, 0.5, 0.75, 1].map(rampColor).join(', ')})`;
+  return { color, lo, hi, grad };
+}
+
+// ── Choropleth map: one metric, all states, levels only ─────────────────────
+// D3-geo + topojson-client + the us-atlas states topology (lazy-loaded from
+// jsDelivr the first time the map is opened). Paints the level for the
+// selected year; change over time lives on the pinned-states chart below.
 // `onPick` is optional — when provided, clicking a state pins it.
-function USMap({ metric, rows, pinned = [], onPick, anchorPhrase, mapMode }) {
+function USMap({ metric, rows, pinned = [], onPick, periodLabel }) {
   const [feats, setFeats] = useState(null);
   const [err, setErr] = useState(false);
   const [tip, setTip] = useState(null);
@@ -1915,66 +1953,7 @@ function USMap({ metric, rows, pinned = [], onPick, anchorPhrase, mapMode }) {
     );
   }
 
-  const valOf = (r) => r == null ? null : (mapMode === 'level' ? r.latest : r.change);
-  const vals = rows.map(valOf).filter(v => v != null && isFinite(v));
-  const NO_DATA = '#E9DFC8';
-
-  // ── Color scales ──────────────────────────────────────────────────────────
-  // Perceptual (Lab) ramps with robust quantile domains, replacing the old
-  // linear beige lerps. Two problems those had: (1) a single outlier state
-  // (usually DC) stretched the min–max domain and washed every other state
-  // into the same light end; (2) when every state moved the same direction
-  // since the anchor (rents all up since Dec 2019), the zero-centered
-  // diverging scale painted the whole country one shade of red. Fixes:
-  // domains clamp at the 5th/95th percentile (legend says ≤ / ≥), and change
-  // maps only diverge when the data actually has both signs.
-  const d3 = window.d3;
-  const quant = (arr, p) => arr.length ? d3.quantile(arr, p) : null;
-  const clamp01 = (t) => Math.max(0, Math.min(1, t));
-
-  // Level mode: sequential, one hue — light cool tint → brand navy.
-  // Direction-neutral on purpose (dark = high, whatever high means).
-  const seqRamp = d3.interpolateLab('#E7EAF3', '#16233F');
-  let lvlLo = quant(vals, 0.05), lvlHi = quant(vals, 0.95);
-  if (!(lvlHi > lvlLo)) { lvlLo = Math.min(...vals); lvlHi = Math.max(...vals); }
-  const levelColor = (v) => {
-    if (v == null || !isFinite(v)) return NO_DATA;
-    const t = lvlHi > lvlLo ? clamp01((v - lvlLo) / (lvlHi - lvlLo)) : 0.5;
-    return seqRamp(t);
-  };
-
-  // Change mode, mixed signs: diverging red ↔ neutral ↔ blue (never red vs
-  // green — that pair collapses for red-green colorblind readers). `flip`
-  // handles metrics where rising is good: red is always "getting worse".
-  const flip = metric.invert_color ? -1 : 1;
-  const MID = '#F0EDE3';
-  const badRamp  = d3.interpolateLab(MID, '#A33124'); // deep warm red
-  const goodRamp = d3.interpolateLab(MID, '#2F5D96'); // clear blue
-  const hasPos = vals.some(v => v > 0), hasNeg = vals.some(v => v < 0);
-  const mixedSigns = hasPos && hasNeg;
-  const divCap = Math.max(quant(vals.map(Math.abs), 0.95) || 0, 0.1);
-  const divergingColor = (v) => {
-    if (v == null || !isFinite(v)) return NO_DATA;
-    const b = Math.max(-1, Math.min(1, (v * flip) / divCap)); // b > 0 = worse
-    return b >= 0 ? badRamp(b) : goodRamp(-b);
-  };
-
-  // Change mode, one shared direction: sequential over the actual spread —
-  // darker = the bigger move away from zero, red if the shared direction is
-  // bad, green if it's good (only one of the two ever appears at a time).
-  let chgLo = quant(vals, 0.05), chgHi = quant(vals, 0.95);
-  if (!(chgHi > chgLo)) { chgLo = Math.min(...vals); chgHi = Math.max(...vals); }
-  const sharedDirBad = hasPos ? flip > 0 : flip < 0;
-  const oneSignRamp = sharedDirBad ? badRamp : d3.interpolateLab(MID, '#1E5B41');
-  const oneSignColor = (v) => {
-    if (v == null || !isFinite(v)) return NO_DATA;
-    if (!(chgHi > chgLo)) return oneSignRamp(0.5);
-    const t = hasPos ? (v - chgLo) / (chgHi - chgLo) : (v - chgHi) / (chgLo - chgHi);
-    return oneSignRamp(clamp01(t));
-  };
-
-  const changeColor = mixedSigns ? divergingColor : oneSignColor;
-  const fillFor = (v) => mapMode === 'level' ? levelColor(v) : changeColor(v);
+  const scale = makeLevelScale(rows.map(r => r.value));
 
   const move = (e, code) => {
     const rect = boxRef.current ? boxRef.current.getBoundingClientRect() : { left: 0, top: 0, width: 0 };
@@ -1983,25 +1962,10 @@ function USMap({ metric, rows, pinned = [], onPick, anchorPhrase, mapMode }) {
 
   const tipRow = tip ? byCode[tip.code] : null;
 
-  // Legend: sample the active scale so the bar always matches the map, with
-  // ≤ / ≥ end labels because the domain is quantile-clamped.
-  const gradFrom = (fn, lo, hi) =>
-    `linear-gradient(90deg, ${[0, 0.25, 0.5, 0.75, 1].map(t => fn(lo + t * (hi - lo))).join(', ')})`;
-  const pfmt = (x) => `${x < 0 ? '−' : '+'}${Math.abs(x).toFixed(Math.abs(x) < 10 ? 1 : 0)}%`;
-  let legendGrad, legendLo, legendHi;
-  if (mapMode === 'level') {
-    legendGrad = gradFrom(levelColor, lvlLo, lvlHi);
-    legendLo = '≤ ' + fmtVal(lvlLo, metric.units);
-    legendHi = '≥ ' + fmtVal(lvlHi, metric.units);
-  } else if (mixedSigns) {
-    legendGrad = gradFrom(changeColor, -divCap, divCap);
-    legendLo = '≤ ' + pfmt(-divCap);
-    legendHi = '≥ ' + pfmt(divCap);
-  } else {
-    legendGrad = gradFrom(changeColor, chgLo, chgHi);
-    legendLo = '≤ ' + pfmt(chgLo);
-    legendHi = '≥ ' + pfmt(chgHi);
-  }
+  // Legend: the shared scale's gradient, with ≤ / ≥ end labels because the
+  // domain is quantile-clamped.
+  const legendLo = '≤ ' + fmtVal(scale.lo, metric.units);
+  const legendHi = '≥ ' + fmtVal(scale.hi, metric.units);
 
   return (
     <div ref={boxRef} style={{ position: 'relative', background: PAPER, border: '1px solid rgba(27,42,78,.18)', padding: '20px 20px 12px' }}>
@@ -2012,7 +1976,7 @@ function USMap({ metric, rows, pinned = [], onPick, anchorPhrase, mapMode }) {
             <path
               key={s.id}
               d={s.d}
-              fill={fillFor(valOf(r))}
+              fill={scale.color(r ? r.value : null)}
               stroke={PAPER}
               strokeWidth="1"
               style={{ cursor: r && onPick ? 'pointer' : 'default' }}
@@ -2043,12 +2007,10 @@ function USMap({ metric, rows, pinned = [], onPick, anchorPhrase, mapMode }) {
           boxShadow: '0 6px 18px rgba(0,0,0,.25)',
         }}>
           <div style={{ fontWeight: 800, marginBottom: 3 }}>{tipRow ? tipRow.name : tip.code}</div>
-          {tipRow ? (
+          {tipRow && tipRow.value != null ? (
             <React.Fragment>
-              <div>{tipRow.latest != null ? fmtVal(tipRow.latest, metric.units) : '—'}
-                {tipRow.change != null && (
-                  <span style={{ color: '#E8C9A8' }}> · {(tipRow.change >= 0 ? '+' : '−') + Math.abs(tipRow.change).toFixed(1)}% {anchorPhrase}</span>
-                )}
+              <div>{fmtVal(tipRow.value, metric.units)}
+                {tipRow.obsLabel && <span style={{ color: '#E8C9A8' }}> · {tipRow.obsLabel}</span>}
               </div>
               {tipRow.rank != null && (
                 <div style={{ color: '#9BA8C2', marginTop: 2 }}>{ordinal(tipRow.rank)} highest of {tipRow.rankN}</div>
@@ -2058,7 +2020,7 @@ function USMap({ metric, rows, pinned = [], onPick, anchorPhrase, mapMode }) {
               )}
             </React.Fragment>
           ) : (
-            <div style={{ color: '#9BA8C2' }}>No data for this state</div>
+            <div style={{ color: '#9BA8C2' }}>No data for this period</div>
           )}
         </div>
       )}
@@ -2068,12 +2030,78 @@ function USMap({ metric, rows, pinned = [], onPick, anchorPhrase, mapMode }) {
         fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif', fontSize: 10, color: MUTE,
       }}>
         <span style={{ fontStyle: 'italic', fontFamily: 'Publico, Georgia, serif', fontSize: 12 }}>
-          {mapMode === 'level' ? `Latest ${metric.label.toLowerCase()}` : `Change ${anchorPhrase}`} · gray = no data
+          {periodLabel} · gray = no data
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span>{legendLo}</span>
-          <span style={{ width: 120, height: 10, background: legendGrad, display: 'inline-block' }} />
+          <span style={{ width: 120, height: 10, background: scale.grad, display: 'inline-block' }} />
           <span>{legendHi}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Bar-chart alternative to the choropleth: every state, sorted ────────────
+// Same rows and color scale as the map; bars are sorted highest-first so the
+// full ranking is readable at a glance. Clicking a row pins the state on the
+// chart below, exactly like clicking it on the map.
+function StateBarList({ metric, rows, pinned = [], onPick, periodLabel }) {
+  const scale = makeLevelScale(rows.map(r => r.value));
+  const has = rows.filter(r => r.value != null && isFinite(r.value)).sort((a, b) => b.value - a.value);
+  const missing = rows.length - has.length;
+  const max = has.length ? has[0].value : 1;
+
+  return (
+    <div style={{ background: PAPER, border: '1px solid rgba(27,42,78,.18)', padding: '20px 20px 12px' }}>
+      <div style={{ fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif' }}>
+        {has.map(r => {
+          const pi = pinned.indexOf(r.code);
+          const pinColor = pi >= 0 ? PIN_COLORS[pi % PIN_COLORS.length] : null;
+          return (
+            <div key={r.code} onClick={() => { if (onPick) onPick(r.code); }}
+              title={onPick ? 'Click to pin on the chart' : undefined}
+              style={{
+                display: 'grid', gridTemplateColumns: '30px minmax(110px, 170px) 1fr 90px',
+                alignItems: 'center', gap: 10, padding: '3px 6px',
+                cursor: onPick ? 'pointer' : 'default',
+                background: pinColor ? hexToRgba(pinColor, 0.10) : 'transparent',
+              }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: SOFT, textAlign: 'right' }}>{r.rank != null ? r.rank : ''}</span>
+              <span style={{
+                fontSize: 12.5, fontWeight: pinColor ? 800 : 600, color: INK,
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {pinColor && <span style={{ width: 9, height: 9, borderRadius: 5, background: pinColor, flexShrink: 0 }} />}
+                {r.name}
+              </span>
+              <span style={{ background: 'rgba(27,42,78,.06)', height: 14, position: 'relative' }}>
+                <span style={{
+                  position: 'absolute', left: 0, top: 0, bottom: 0,
+                  width: `${Math.max(max > 0 ? (r.value / max) * 100 : 0, 0.75)}%`,
+                  background: scale.color(r.value),
+                }} />
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: INK, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                {fmtVal(r.value, metric.units)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 10,
+        fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif', fontSize: 10, color: MUTE,
+      }}>
+        <span style={{ fontStyle: 'italic', fontFamily: 'Publico, Georgia, serif', fontSize: 12 }}>
+          {periodLabel}{missing > 0 ? ` · ${missing} ${missing === 1 ? 'state has' : 'states have'} no data for this period` : ''}
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>{'≤ ' + fmtVal(scale.lo, metric.units)}</span>
+          <span style={{ width: 120, height: 10, background: scale.grad, display: 'inline-block' }} />
+          <span>{'≥ ' + fmtVal(scale.hi, metric.units)}</span>
         </span>
       </div>
     </div>
@@ -2351,10 +2379,14 @@ function CompareView({ data, metricIds, setMetricIds, homeState, anchorId, displ
 }
 
 // ── Map view: the US choropleth as its own tab, one metric at a time ────────
-function MapView({ data, metricId, setMetricId, anchorId, priceType, displayMode }) {
+// Levels only — the map (or its bar-chart alternate) paints the level for a
+// selected year, and change over time lives on the pinned-states chart below,
+// which carries its own anchor + Nominal/Real controls.
+function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType, setPriceType }) {
   const idx = window.AFFORDABILITY_STATES;
   const cpiData = data.cpi_all_items ? data.cpi_all_items.data : null;
-  const [mapMode, setMapMode] = useState('change'); // 'change' | 'level'
+  const [chartKind, setChartKind] = useState('map'); // 'map' | 'bars'
+  const [yearSel, setYearSel] = useState(null);      // null = latest available year
   // Click-to-pin: clicking a state on the map adds it to the overlay chart
   // below (and outlines it on the map); clicking again removes it. Pins
   // survive metric switches so you can walk one set of states across metrics.
@@ -2365,51 +2397,77 @@ function MapView({ data, metricId, setMetricId, anchorId, priceType, displayMode
   const [, setLoadTick] = useState(0);
   const [failedIds, setFailedIds] = useState(() => new Set());
 
-  useEffect(() => {
-    let live = true;
-    loadDataFile(`data/state_metrics/${metricId}.js`)
-      .then(() => { if (live) setLoadTick(t => t + 1); })
-      .catch(() => { if (live) setFailedIds(prev => new Set(prev).add(metricId)); });
-    return () => { live = false; };
-  }, [metricId]);
+  // Index-unit metrics (rebase: true — home prices) are excluded here: the map
+  // shows levels only, and FHFA index levels aren't comparable across states
+  // (each state is indexed to its own 1980 base). They stay in the other views.
+  // Resolved before the loader effect so a stale deep link (metric=home_prices)
+  // lazy-loads the fallback metric, not the excluded one.
+  const metricsSorted = idx ? idx.metrics.filter(m => !m.rebase).sort((a, b) => a.label.localeCompare(b.label)) : [];
+  const metric = metricsSorted.find(m => m.id === metricId) || metricsSorted[0];
+  const loadId = metric ? metric.id : null;
 
-  if (!idx) return null;
-  const metricsSorted = idx.metrics.slice().sort((a, b) => a.label.localeCompare(b.label));
-  const metric = idx.metrics.find(m => m.id === metricId) || idx.metrics[0];
+  useEffect(() => {
+    if (!loadId) return;
+    let live = true;
+    loadDataFile(`data/state_metrics/${loadId}.js`)
+      .then(() => { if (live) setLoadTick(t => t + 1); })
+      .catch(() => { if (live) setFailedIds(prev => new Set(prev).add(loadId)); });
+    return () => { live = false; };
+  }, [loadId]);
+
+  if (!idx || !metric) return null;
   const md = window.STATE_METRIC ? window.STATE_METRIC[metric.id] : null;
   const status = failedIds.has(metric.id) ? 'error' : (md ? 'ready' : 'loading');
 
   const names = {};
   idx.states.forEach(s => { names[s.code] = s.name; });
 
-  const anchorD = anchorDate(anchorId, null);
-  // Deflate dollar/index metrics when the global switch is Real. No state CPI
-  // exists, so state values use the national CPI-U — the standard fallback.
+  // Deflate dollar metrics when the Real toggle (on the §02 chart controls)
+  // is on. No state CPI exists, so state values use the national CPI-U — the
+  // standard fallback.
   const metricReal = priceType === 'real' && isDeflatable({ id: metric.id, units: metric.units });
   const deflate = (arr) => metricReal ? toReal(arr, cpiData) : arr;
+  const annual = (metric.frequency || '').startsWith('Annual');
+
+  // Years available for this metric (union across states), newest first. The
+  // dropdown defaults to the latest year; within a year each state shows its
+  // last reading, so monthly/quarterly series default to the latest month.
+  let years = [];
+  if (md) {
+    const set = new Set();
+    Object.keys(md.states).forEach(code => md.states[code].data.forEach(d => set.add(d.date.slice(0, 4))));
+    years = Array.from(set).sort().reverse();
+  }
+  const year = yearSel && years.includes(yearSel) ? yearSel : years[0];
 
   let rows = [];
-  if (md) {
+  if (md && year) {
     rows = Object.keys(md.states).map(code => {
-      const s = md.states[code];
-      const d = deflate(s.data);
+      const d = deflate(md.states[code].data);
+      let obs = null;
+      for (let i = d.length - 1; i >= 0; i--) {         // data is date-ascending
+        const y = d[i].date.slice(0, 4);
+        if (y === year) { obs = d[i]; break; }
+        if (y < year) break;
+      }
       return {
         code,
         name: names[code] || code,
-        latest: d.length ? d[d.length - 1].value : s.latest_value,
-        change: pctChange(d, anchorId === 'max' ? d[0].date : anchorD),
-        rank: s.rank ?? null,     // build-time rank from fetch_data.R
-        rankN: s.rank_n ?? null,
+        value: obs ? obs.value : null,
+        obsLabel: obs ? (annual ? year : fmtDate(obs.date)) : null,
+        rank: null, rankN: null,
       };
     });
-    // Client-side fallback ranks (latest value, 1 = highest) for payloads
-    // generated before build-time rankings existed.
-    const ranked = rows.filter(r => r.latest != null).slice().sort((a, b) => b.latest - a.latest);
+    // Ranks on the selected year's values, 1 = highest; ties share a rank.
+    // Build-time ranks only cover the latest value, so rank client-side here.
+    const ranked = rows.filter(r => r.value != null).sort((a, b) => b.value - a.value);
     ranked.forEach((r, i) => {
-      if (r.rank == null) { r.rank = i + 1; r.rankN = ranked.length; }
-      else if (r.rankN == null) { r.rankN = ranked.length; }
+      r.rank = (i > 0 && r.value === ranked[i - 1].value) ? ranked[i - 1].rank : i + 1;
+      r.rankN = ranked.length;
     });
   }
+
+  const periodLabel = `${metric.label} — ${year || ''}${!annual && year && year === years[0] ? ' (latest month)' : ''}`;
 
   return (
     <React.Fragment>
@@ -2453,36 +2511,46 @@ function MapView({ data, metricId, setMetricId, anchorId, priceType, displayMode
                      style={{ color: MUTE, textDecoration: 'none', borderBottom: '1px dotted rgba(27,42,78,.3)' }}>
                     {metric.source_label} ↗
                   </a>
-                ) : metric.source_label} · {metric.frequency} · hover any state, click to pin it on the chart.
+                ) : metric.source_label} · {metric.frequency} · click any state to pin it on the chart below.
               </span>
-              <span style={{ display: 'flex', gap: 6, marginLeft: 16, flexWrap: 'wrap' }}>
-                <button onClick={() => setMapMode('change')} style={styles.modeBtn(mapMode === 'change')}>Change</button>
-                <button onClick={() => setMapMode('level')} style={styles.modeBtn(mapMode === 'level')}>Level</button>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 16, flexWrap: 'wrap' }}>
+                <button onClick={() => setChartKind('map')} style={styles.modeBtn(chartKind === 'map')}>Map</button>
+                <button onClick={() => setChartKind('bars')} style={styles.modeBtn(chartKind === 'bars')}>Bar chart</button>
+                <select value={year || ''} onChange={(e) => setYearSel(e.target.value)} aria-label="Year"
+                  style={{ ...styles.select, fontSize: 12, fontWeight: 700, padding: '5px 8px', marginLeft: 6 }}>
+                  {years.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
               </span>
             </div>
 
-            <USMap metric={metric} rows={rows} pinned={pinned} onPick={togglePin}
-                   anchorPhrase={anchorById(anchorId).phrase} mapMode={mapMode} />
+            {chartKind === 'map' ? (
+              <USMap metric={metric} rows={rows} pinned={pinned} onPick={togglePin} periodLabel={periodLabel} />
+            ) : (
+              <StateBarList metric={metric} rows={rows} pinned={pinned} onPick={togglePin} periodLabel={periodLabel} />
+            )}
 
             <div style={{
               marginTop: 14, fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic',
               fontSize: 12.5, color: MUTE,
             }}>
-              % change is measured {anchorById(anchorId).phrase}. Ranks are on the latest value (1 = highest — direction-neutral: highest rent is bad, highest income is good).
+              Values are levels for {year}{annual ? '' : "; monthly and quarterly measures use each state's last reading in that year"}. Ranks are on the same values (1 = highest — direction-neutral: highest rent is bad, highest income is good).
               {metric.id === 'rent' && ' State rents aggregate Zillow county data with renter-household weights; states where coverage falls below half of renter households are omitted.'}
             </div>
 
-            {/* Click-to-pin overlay chart: every state clicked on the map is
-                drawn here; clicking more states keeps adding lines. */}
+            {/* Click-to-pin overlay chart: every state clicked on the map or
+                bar chart is drawn here as % change over time — the graphic
+                above shows levels, this is where change lives. The anchor +
+                Nominal/Real controls sit here (not on the global bar) because
+                in the Map view they only shape this chart. */}
             <div className="at-section-head" style={{ ...styles.sectionHead, marginTop: 44 }}>
               <span style={styles.sectionLabel}>§02</span>
               <span style={styles.sectionTitle}>
                 {pinned.length
                   ? `${metric.label} — ${pinned.length} ${pinned.length === 1 ? 'state' : 'states'} pinned`
-                  : 'Pin states to chart them'}
+                  : 'Pin states to chart their change'}
               </span>
               <span className="at-section-dek" style={styles.sectionDek}>
-                Click states on the map to add them; click a state or its chip to remove it.
+                Click states above to add them; click a state or its chip to remove it.
               </span>
             </div>
             {pinned.length === 0 ? (
@@ -2491,10 +2559,31 @@ function MapView({ data, metricId, setMetricId, anchorId, priceType, displayMode
                 padding: '36px 32px', textAlign: 'center',
                 fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE,
               }}>
-                Click any state on the map above to start a comparison chart.
+                Click any state above to chart how it has changed over time.
               </div>
             ) : (
               <React.Fragment>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap',
+                  background: MENU_BG, border: '1px solid rgba(27,42,78,.15)',
+                  padding: '12px 16px', marginBottom: 16,
+                }}>
+                  <span style={styles.controlLabel}>Measure from</span>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {ANCHORS.map(a => (
+                      <button key={a.id} onClick={() => setAnchorId(a.id)} style={styles.anchorBtn(a.id === anchorId)}>
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
+                  <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={styles.controlLabel}>Type</span>
+                    <span style={{ display: 'flex' }}>
+                      <button onClick={() => setPriceType('nominal')} style={styles.modeBtn(priceType === 'nominal')}>Nominal</button>
+                      <button onClick={() => setPriceType('real')} style={styles.modeBtn(priceType === 'real')}>Real</button>
+                    </span>
+                  </span>
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
                   {pinned.map((code, i) => (
                     <button key={code} onClick={() => togglePin(code)} style={{
@@ -2520,7 +2609,13 @@ function MapView({ data, metricId, setMetricId, anchorId, priceType, displayMode
                       if (!s) return null;
                       return { label: names[code] || code, color: PIN_COLORS[i % PIN_COLORS.length], data: deflate(s.data) };
                     }).filter(Boolean)}
-                    anchorId={anchorId} displayMode={displayMode} height={340} />
+                    anchorId={anchorId} displayMode="pct" height={340} />
+                </div>
+                <div style={{
+                  marginTop: 10, fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic',
+                  fontSize: 12.5, color: MUTE,
+                }}>
+                  Lines show % change {anchorById(anchorId).phrase}{metricReal ? ', inflation-adjusted with the national CPI-U (no state price index exists)' : ''}.
                 </div>
               </React.Fragment>
             )}
@@ -2556,17 +2651,20 @@ function AppMain({ data }) {
   const [displayMode, setDisplayMode] = useState(hash.mode === 'pct' ? 'pct' : 'level');
   const [priceType, setPriceType] = useState(hash.type === 'real' ? 'real' : 'nominal');
   const [stateCode, setStateCode] = useState(validState(hash.state) ? hash.state : 'CA');
+  // Both state-metric views default to the ACA benchmark premium (comms request).
+  const defaultMetric = validMetric('aca_benchmark_premium') ? 'aca_benchmark_premium'
+    : (idx && idx.metrics[0] ? idx.metrics[0].id : 'unemployment');
   // Compare view supports any number of metrics (comma-separated in the hash).
   const [metricIds, setMetricIds] = useState(() => {
     const fromHash = (hash.metric || '').split(',').filter(validMetric);
     if (fromHash.length) return fromHash;
-    return [idx && idx.metrics[0] ? idx.metrics[0].id : 'unemployment'];
+    return [defaultMetric];
   });
   // The Map view shows exactly one metric at a time.
   const [mapMetricId, setMapMetricId] = useState(() => {
     const first = (hash.metric || '').split(',')[0];
     if (hash.view === 'map' && validMetric(first)) return first;
-    return idx && idx.metrics[0] ? idx.metrics[0].id : 'unemployment';
+    return defaultMetric;
   });
 
   // Deep links: a campaigner can send a colleague straight to their state.
@@ -2667,7 +2765,10 @@ function AppMain({ data }) {
         </div>
       )}
 
-      {/* Global controls: anchor + $/% */}
+      {/* Global controls: anchor + $/%. Hidden on the Map view — the map is
+          levels-only with its own year dropdown, and the anchor + Nominal/Real
+          controls live on its pinned-states chart instead. */}
+      {view !== 'map' && (
       <div className="at-pad at-controls" style={styles.controls}>
         <span style={styles.controlLabel}>Measure from</span>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -2694,6 +2795,7 @@ function AppMain({ data }) {
           </span>
         </span>
       </div>
+      )}
 
       {priceType === 'real' && (
         <div className="at-pad" style={{ padding: '10px 56px 0' }}>
@@ -2710,7 +2812,8 @@ function AppMain({ data }) {
       {view === 'compare'  && <CompareView data={data} metricIds={metricIds} setMetricIds={setMetricIds}
                                            homeState={stateCode} anchorId={anchorId} displayMode={displayMode} priceType={priceType} />}
       {view === 'map'      && <MapView data={data} metricId={mapMetricId} setMetricId={setMapMetricId}
-                                       anchorId={anchorId} priceType={priceType} displayMode={displayMode} />}
+                                       anchorId={anchorId} setAnchorId={setAnchorId}
+                                       priceType={priceType} setPriceType={setPriceType} />}
 
       {/* Footer */}
       <div className="at-pad" style={{ padding: '0 56px 48px' }}>

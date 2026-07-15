@@ -106,9 +106,18 @@ loudly when absent).
   national-rank badge, plus annual stat tiles; "United States" is a picker
   option built from the national payload — no default US overlay),
   `CompareView` (1–4 metrics as side-by-side panels of pinned states; the US
-  average is pinnable like any state, not shown by default), and `MapView`
-  (the choropleth as its own tab: single-select measure pills, Change/Level
-  modes; the old all-states sparkline grid was removed).
+  average is pinnable like any state, not shown by default; defaults to the
+  ACA benchmark premium), and `MapView` (its own tab: single-select measure
+  pills, **levels only** — a Map/Bar-chart toggle where Change/Level used to
+  be, plus a year dropdown; within a year each state shows its last reading,
+  so monthly/quarterly metrics default to the latest month. The sorted bar
+  chart shares the map's warm sequential ramp (`LEVEL_RAMP`, sand → burnt
+  sienna, quantile-clamped domain). Change over time lives on the
+  pinned-states chart below (§02), which is always %-change and carries its
+  own anchor + Nominal/Real controls — the global controls bar is hidden on
+  this view. Rebase/index metrics (home prices) are excluded from the map
+  picker because index levels aren't comparable across states. Defaults to
+  the ACA benchmark premium).
 - Categories and chips/cards are ordered alphabetically (comms request);
   category grouping and color families are kept. National picker rows are
   collapsible (collapsed by default, "N of M selected" + Show/Hide chevron);
@@ -118,13 +127,14 @@ loudly when absent).
   in) and the us-atlas `states-10m.json` topology from jsDelivr on first
   open. The topology is raw lon/lat (not pre-projected); USMap projects
   with `geoAlbersUsa().scale(1300).translate([487.5, 305])` (standard
-  975×610 layout) and memoizes path strings per topology load. Diverging
-  change colors match the heatmap palette; click pins a state on the
-  overlay chart.
+  975×610 layout) and memoizes path strings per topology load. The level
+  color scale is d3-free (pre-sampled Lab ramp) so the bar chart renders
+  before the map libs load; click pins a state on the overlay chart.
 - Global controls: anchor ("Measure from": 1Y / Since Jan 2025 / 2019
   (Dec 2019) / Since 2000 / Max, **defaults to 2019**), a Nominal/Real type
   toggle, and a $-levels vs %-change toggle. Cards can override the anchor
-  locally; Nominal/Real and $/% are page-wide only.
+  locally; Nominal/Real and $/% are page-wide only. The whole bar is hidden
+  on the Map view (see `MapView` above).
 - Nominal/Real: `priceType` in `AppMain` drives everything via `seriesForType()`
   / `toReal()` (deflate by CPI-U all-items = `cpi_all_items`, latest-month
   dollars). `isDeflatable()` gates it — only `$`/`Index`-unit series deflate;
