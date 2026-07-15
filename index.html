@@ -75,6 +75,7 @@
 
 <script src="data/app_data.js"></script>
 <script src="data/states_index.js"></script>
+<script src="assets/esp_logo.js"></script>
 
 <script type="text/babel" data-presets="react">
 (function() {
@@ -139,6 +140,24 @@ function anchorDate(id, data) {
 // data-URL <img> elements not decoding before snapshot, foreignObject
 // CORS quirks). Drawing the chart canvas + text on a fresh canvas is
 // deterministic and needs no external library.
+
+// The ESP wordmark logo, loaded once from the embedded data URI (assets/esp_logo.js).
+// A data-URI source never taints the canvas, so PNG export keeps working under
+// file://, http, and offline. Resolves to null if the asset is unavailable.
+let _espLogoPromise = null;
+function loadEspLogo() {
+  if (_espLogoPromise) return _espLogoPromise;
+  _espLogoPromise = new Promise((resolve) => {
+    const src = (typeof window !== 'undefined' && window.ESP_LOGO_DATAURI) || null;
+    if (!src) return resolve(null);
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+  return _espLogoPromise;
+}
+
 async function downloadCardAsPNG({
   chartCanvas, item, accent, headlineText, changeText, changeColor, rangeLabel, legend,
   chartH = 540, // taller charts (the Map view's all-states bar list) grow the card
@@ -171,27 +190,34 @@ async function downloadCardAsPNG({
   // ── Header band ─────────────────────────────────────────────────────────
   const padX = 80;
 
-  // Logo box ("E")
-  ctx.fillStyle = NAVY;
-  ctx.fillRect(padX, 80, 56, 56);
-  ctx.fillStyle = PAPER;
-  ctx.font = `600 36px ${SERIF}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('E', padX + 28, 80 + 30);
-  ctx.textBaseline = 'alphabetic';
+  // ESP logo (the wordmark "Economic Security Project" is part of the artwork,
+  // so no separate text wordmark — that would duplicate the title).
+  const espLogo = await loadEspLogo();
+  if (espLogo && espLogo.naturalWidth) {
+    const logoH = 84;
+    const logoW = logoH * (espLogo.naturalWidth / espLogo.naturalHeight);
+    ctx.drawImage(espLogo, padX, 72, logoW, logoH);
+  } else {
+    // Fallback if the embedded logo failed to load: draw the old "E" mark + wordmark.
+    ctx.fillStyle = NAVY;
+    ctx.fillRect(padX, 80, 56, 56);
+    ctx.fillStyle = PAPER;
+    ctx.font = `600 36px ${SERIF}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('E', padX + 28, 80 + 30);
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = NAVY;
+    ctx.font = `700 28px ${DISPLAY}`;
+    ctx.fillText('Economic Security Project', padX + 76, 110);
+  }
 
-  // Brand wordmark
-  ctx.textAlign = 'left';
-  ctx.fillStyle = NAVY;
-  ctx.font = `700 28px ${DISPLAY}`;
-  ctx.fillText('Economic Security Project', padX + 76, 110);
-  ctx.fillStyle = MUTE;
-  ctx.font = `600 14px ${DISPLAY}`;
-  ctx.fillText('THE AFFORDABILITY TRACKER', padX + 76, 134);
-
-  // Date (right side)
+  // Tagline + date (right side)
   ctx.textAlign = 'right';
+  ctx.fillStyle = NAVY;
+  ctx.font = `700 16px ${DISPLAY}`;
+  ctx.fillText('THE AFFORDABILITY TRACKER', W - padX, 110);
   ctx.fillStyle = MUTE;
   ctx.font = `600 14px ${DISPLAY}`;
   const today = new Date().toLocaleDateString('en-US', {
@@ -327,10 +353,13 @@ function downloadCSV(item) {
   const header = 'date,value,units\n';
   const units = (item.units || '').replace(/"/g, '""');
   const body = item.data.map(r => `${r.date},${r.value},"${units}"`).join('\n');
+  // Provenance goes at the BOTTOM, prefixed with `#`, so the column header is
+  // line 1 (a clean rectangle). read_csv(comment="#") / pandas comment="#"
+  // drop these lines regardless of position; a bare read still parses the data.
   const sourceLine = item.fred_id
     ? `# ${item.label} — FRED ${item.fred_id}\n# Source: https://fred.stlouisfed.org/series/${item.fred_id}\n`
     : `# ${item.label} — ${item.source_note || 'Derived from public data'}\n`;
-  const csv = `${sourceLine}${header}${body}\n`;
+  const csv = `${header}${body}\n\n${sourceLine}`;
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -355,9 +384,10 @@ function downloadCompareCSV(metric, seriesList) {
   const esc = (v) => `"${String(v).replace(/"/g, '""')}"`;
   const header = ['date', ...seriesList.map(s => esc(s.label))].join(',') + '\n';
   const body = dates.map(dt => [dt, ...cols.map(m => m[dt] ?? '')].join(',')).join('\n');
+  // Provenance appended at the bottom (see downloadCSV) so the header is line 1.
   const sourceLine = `# ${metric.label}${metric.units ? ` (${metric.units})` : ''} — ${metric.source_label || 'public data'}\n`
     + (metric.source_url ? `# Source: ${metric.source_url}\n` : '');
-  const csv = `${sourceLine}${header}${body}\n`;
+  const csv = `${header}${body}\n\n${sourceLine}`;
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2191,10 +2221,11 @@ function downloadStateYearCSV(metric, rows, year, isReal) {
   const header = 'state,code,value,units,observation_date,rank\n';
   const body = sorted.map(r =>
     [esc(r.name), r.code, r.value ?? '', esc(metric.units || ''), r.obsDate || '', r.rank ?? ''].join(',')).join('\n');
+  // Provenance appended at the bottom (see downloadCSV) so the header is line 1.
   const sourceLine = `# ${metric.label} — all states, ${year}\n`
     + `# ${metric.source_label || 'public data'}${metric.source_url ? `\n# Source: ${metric.source_url}` : ''}\n`
     + (isReal ? '# Values are inflation-adjusted to latest-month dollars using the national CPI-U\n' : '');
-  const blob = new Blob([`${sourceLine}${header}${body}\n`], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob([`${header}${body}\n\n${sourceLine}`], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
