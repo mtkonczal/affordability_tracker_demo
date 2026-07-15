@@ -37,6 +37,17 @@ jobs:
         continue-on-error: true
         run: python3 scripts/fetch_kff.py
 
+      # Census ACS 1-year: 20th/80th percentile income (B19080) + rent burden
+      # (B25070). New vintages land each September; running monthly is
+      # idempotent. Non-blocking: fetch_data.R reads the last-good
+      # data/census/*.csv if this fails (and skips the series entirely,
+      # without failing, if none exist yet).
+      - name: Refresh Census ACS annual series (non-blocking)
+        continue-on-error: true
+        env:
+          CENSUS_API_KEY: ${{ secrets.CENSUS_API_KEY }}
+        run: python3 scripts/fetch_census.py
+
       - name: Fetch data
         env:
           BLS_KEY: ${{ secrets.BLS_KEY }}

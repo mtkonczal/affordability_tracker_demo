@@ -183,6 +183,12 @@
           <td>Regular unleaded, US average pump price.</td>
         </tr>
         <tr>
+          <td><b>Water &amp; sewer</b></td>
+          <td>BLS CPI (water, sewer &amp; trash collection services), via FRED</td>
+          <td><span class="freq m">Monthly</span></td>
+          <td>National only. No public state-level water-rate series exists (the AWWA rate survey is proprietary), so the tracker does not show state water bills.</td>
+        </tr>
+        <tr>
           <td><b>Rent (market)</b></td>
           <td>Zillow Observed Rent Index (ZORI)</td>
           <td><span class="freq m">Monthly</span></td>
@@ -224,14 +230,40 @@
           <td><span class="freq a">Annual</span></td>
           <td>Share of the total population with no health coverage, KFF estimates from the Census ACS. 2008 onward; no 2020 point (the ACS did not release comparably that year).</td>
         </tr>
+        <tr>
+          <td><b>Household debt per capita</b></td>
+          <td><a href="https://www.newyorkfed.org/microeconomics/databank.html" target="_blank" rel="noopener">NY Fed</a> Consumer Credit Panel / Equifax, State-Level Household Debt Statistics</td>
+          <td><span class="freq a">Annual</span></td>
+          <td>Total household debt per person with a credit file; each point is Q4, 2003 onward. The same panel supplies the state metrics, so national and state lines are directly comparable.</td>
+        </tr>
+        <tr>
+          <td><b>Rent burden</b></td>
+          <td>Census ACS 1-year estimates, table B25070</td>
+          <td><span class="freq a">Annual</span></td>
+          <td>Share of renter households paying 30%+ of income on gross rent. 2005 onward; no 2020 point. Households where the ratio cannot be computed are excluded.</td>
+        </tr>
+        <tr>
+          <td><b>Income: 20th &amp; 80th percentile</b></td>
+          <td>Census ACS 1-year estimates, table B19080</td>
+          <td><span class="freq a">Annual</span></td>
+          <td>Quintile upper limits: the income levels 20% and 80% of households fall below. The ACS publishes quintile limits, not arbitrary percentiles — 20th/80th are the exact published points, so the tracker uses them rather than interpolating a 25th/75th. Nominal dollars (the Real toggle deflates them); median income remains inflation-adjusted as published.</td>
+        </tr>
+        <tr>
+          <td><b>Rent in hours of work</b></td>
+          <td>Derived: Zillow ZORI ÷ BLS average hourly earnings</td>
+          <td><span class="freq m">Monthly</span></td>
+          <td>Hours at the average private-sector wage needed to pay one month's market-rate rent. 2015 onward.</td>
+        </tr>
       </tbody>
     </table>
     </div>
 
     <h2><span class="sec">§03</span> State series</h2>
     <p class="lead">
-      Every state series covers all 50 states plus DC unless noted. The state view draws
-      each series against the US average; the compare view puts any set of states on one chart.
+      Every state series covers all 50 states plus DC unless noted. The state view shows
+      every series for one state (the US is available as an option); the compare view puts
+      any set of states — including the US — on one chart, and the map view shades all
+      states by one measure at a time.
     </p>
     <div class="table-wrap">
     <table>
@@ -285,9 +317,41 @@
           <td><span class="freq a">Annual</span></td>
           <td>Share of each state's population with no health coverage, KFF estimates from the Census ACS. 2008 onward, no 2020 point.</td>
         </tr>
+        <tr>
+          <td><b>Household debt, student loan debt (per capita); credit card delinquency (90+)</b></td>
+          <td><a href="https://www.newyorkfed.org/microeconomics/databank.html" target="_blank" rel="noopener">NY Fed</a> Consumer Credit Panel / Equifax, State-Level Household Debt Statistics</td>
+          <td><span class="freq a">Annual</span></td>
+          <td>Per person with a credit file (ages 18+), not per resident; delinquency is percent of balance 90+ days late — stricter than the 30-day national bank series. Each point is Q4, 2003 onward. One panel covers the US and every state, so cross-state and national comparisons stay apples-to-apples.</td>
+        </tr>
+        <tr>
+          <td><b>Rent burden</b></td>
+          <td>Census ACS 1-year, table B25070</td>
+          <td><span class="freq a">Annual</span></td>
+          <td>Share of renter households paying 30%+ of income on gross rent. 2005 onward, no 2020 point.</td>
+        </tr>
+        <tr>
+          <td><b>Income: 20th &amp; 80th percentile</b></td>
+          <td>Census ACS 1-year, table B19080</td>
+          <td><span class="freq a">Annual</span></td>
+          <td>Quintile upper limits — the exact percentiles the ACS publishes (see the national table's note). Nominal dollars.</td>
+        </tr>
+        <tr>
+          <td><b>Rent in hours of work</b></td>
+          <td>Derived: Zillow ZORI ÷ BLS state hourly earnings</td>
+          <td><span class="freq m">Monthly</span></td>
+          <td>Hours at the state's average private-sector wage to pay a month's market rent. Inherits the rent series' coverage caveats.</td>
+        </tr>
       </tbody>
     </table>
     </div>
+
+    <p class="lead" style="margin-top:14px">
+      <b>Rankings.</b> Every state metric carries a national rank computed at data-build
+      time from the latest value (1 = highest, ties share a rank). Ranks are
+      direction-neutral — "1st highest" income is good news and "1st highest" rent is not —
+      and cover only states with data (market rent omits low-coverage states, for example),
+      so the denominator is shown alongside every rank.
+    </p>
 
     <h2><span class="sec">§04</span> Annual state indicators</h2>
     <p class="lead">
@@ -302,16 +366,6 @@
           <td><b>Infant child care, center-based</b></td>
           <td><a href="https://info.childcareaware.org/price-and-supply-2025" target="_blank" rel="noopener">Child Care Aware of America</a>, 2025</td>
           <td>Annual price of full-time center-based infant care. CO, DC, NM and SC did not report a 2025 price. Seven states (AL, FL, MT, PA, TX, WV, WY) carry a footnote flag in CCAoA's published tables — check the report before quoting those states specifically.</td>
-        </tr>
-        <tr>
-          <td><b>Household debt per capita</b></td>
-          <td><a href="https://www.newyorkfed.org/microeconomics/databank.html" target="_blank" rel="noopener">NY Fed</a> Consumer Credit Panel / Equifax, Q4 2025</td>
-          <td>Total debt balance per person <i>with a credit file</i> (ages 18+), not per resident.</td>
-        </tr>
-        <tr>
-          <td><b>Credit card delinquency (90+)</b></td>
-          <td>NY Fed Consumer Credit Panel / Equifax, Q4 2025</td>
-          <td>Percent of credit card <i>balance</i> 90+ days delinquent — a stricter measure than the 30-day national bank series.</td>
         </tr>
         <tr>
           <td><b>Medical debt in collections</b></td>

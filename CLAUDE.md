@@ -22,8 +22,15 @@ Rscript fetch_data.R
 # Writes data/kff/*.csv; then re-run fetch_data.R to fold them in. No API key.
 python3 scripts/fetch_kff.py
 
-# Rebuild the annual state indicators from raw sources (run yearly)
+# Rebuild the annual state indicators AND the NY Fed debt time series from raw
+# sources (run yearly, after downloading the new NY Fed area report into
+# data/annual/raw/). Writes data/annual/*.csv + data/nyfed/*.csv.
 python3 scripts/convert_annual.py
+
+# Refresh the Census ACS series — 20th/80th percentile income (B19080) and
+# rent burden (B25070) — yearly, after the September ACS 1-year release.
+# Writes data/census/*.csv; needs CENSUS_API_KEY (env or .Renviron).
+python3 scripts/fetch_census.py
 
 # View the dashboard (or use the static server in .claude/launch.json)
 open index.html
@@ -48,13 +55,35 @@ loudly when absent).
    indicators (CCAoA, NY Fed, Urban); their `state,value` CSVs are attached to
    state payloads as stat tiles. Raw sources live in `data/annual/raw/`; see
    `data/annual/README.md`.
-3b. KFF annual time series: `scripts/fetch_kff.py` (run yearly, no key) scrapes
-   the `gdocsObject` JSON embedded in two KFF State Health Facts indicator
-   pages — ACA benchmark premium (metal-tier) and the uninsured rate — into
-   `data/kff/{id}.csv` (long: `date,code,value`, `code` = `US`/postal).
-   `fetch_data.R`'s `read_kff()` loads these; `source = "kff"` entries in both
-   `SERIES` and `STATE_METRICS` turn each into a national card + a state metric
-   (unlike the single-value tiles above, these are full annual time series).
+3b. Annual long-CSV time series (three dirs, one shape — `date,code,value`,
+   `code` = `US`/postal; read by `read_long_dir()` in `fetch_data.R`; entries
+   with `source = "kff"|"nyfed"|"census"` + `src_id` in `SERIES` /
+   `STATE_METRICS` become national cards + state metrics — full annual time
+   series, unlike the single-value tiles above):
+   - `data/kff/` — `scripts/fetch_kff.py` (yearly, no key) scrapes the
+     `gdocsObject` JSON in two KFF State Health Facts pages: ACA benchmark
+     premium (metal-tier) and the uninsured rate.
+   - `data/nyfed/` — `scripts/convert_annual.py` extracts every Q4 (2003→)
+     from the NY Fed area report xlsx in `data/annual/raw/`: household debt
+     per capita, student-loan debt per capita, 90+ credit-card delinquency.
+     Q4 points are dated YYYY-12-01 so the Dec-2019 anchor hits Q4 2019. The
+     `allUS` row becomes `US` — state metrics get a same-panel national
+     overlay (never mix NY Fed states with G.19 national).
+   - `data/census/` — `scripts/fetch_census.py` (yearly, needs
+     `CENSUS_API_KEY`): 20th/80th percentile household income (B19080
+     quintile upper limits — the ACS publishes no other percentiles; don't
+     interpolate 25th/75th) and rent burden (B25070 share paying 30%+).
+     These SERIES entries are `optional = TRUE`: missing files skip loudly
+     without failing the build (the files may not exist before the first
+     fetch_census.py run).
+3c. Derived metrics, computed inside `fetch_data.R`: `rent_hours` = ZORI rent
+   ÷ average hourly earnings, national and per state (`source =
+   "derived_rent_hours"`; depends on rent + wages appearing earlier in
+   `STATE_METRICS` — keep the order).
+3d. Build-time rankings: after the state loop, every state metric gets each
+   state's national rank on the latest value (1 = highest, ties.method
+   "min") baked into both payload shapes (`rank`, `rank_n`). The front end
+   phrases direction; `invert_color` says whether high is good.
 4. Outputs, all committed artifacts (re-run the script, don't hand-edit):
    - `data/app_data.js` — national series → `window.AFFORDABILITY_DATA`
    - `data/states_index.js` — state/metric catalog → `window.AFFORDABILITY_STATES`
@@ -72,10 +101,26 @@ loudly when absent).
 
 ### Front-end (`index.html`, single file, React via Babel-standalone)
 
-- Three views in `AppMain`: `NationalView` (additive category/chip selection,
-  chart cards, YoY heatmap), `StateView` (all metrics for one state, each
-  with a dashed US-average overlay, plus annual stat tiles), `CompareView`
-  (one metric, US + pinned states overlay chart + all-states sparkline grid).
+- Four views in `AppMain`: `NationalView` (additive category/chip selection,
+  chart cards, YoY heatmap), `StateView` (all metrics for one state with a
+  national-rank badge, plus annual stat tiles; "United States" is a picker
+  option built from the national payload — no default US overlay),
+  `CompareView` (1–4 metrics as side-by-side panels of pinned states; the US
+  average is pinnable like any state, not shown by default), and `MapView`
+  (the choropleth as its own tab: single-select measure pills, Change/Level
+  modes; the old all-states sparkline grid was removed).
+- Categories and chips/cards are ordered alphabetically (comms request);
+  category grouping and color families are kept. National picker rows are
+  collapsible (collapsed by default, "N of M selected" + Show/Hide chevron);
+  the category pill still bulk-toggles without expanding.
+- The choropleth lazy-loads topojson-client + the full d3 bundle (the
+  standalone d3-geo UMD breaks without d3-array/internmap — don't swap it
+  in) and the us-atlas `states-10m.json` topology from jsDelivr on first
+  open. The topology is raw lon/lat (not pre-projected); USMap projects
+  with `geoAlbersUsa().scale(1300).translate([487.5, 305])` (standard
+  975×610 layout) and memoizes path strings per topology load. Diverging
+  change colors match the heatmap palette; click pins a state on the
+  overlay chart.
 - Global controls: anchor ("Measure from": 1Y / Since Jan 2025 / 2019
   (Dec 2019) / Since 2000 / Max, **defaults to 2019**), a Nominal/Real type
   toggle, and a $-levels vs %-change toggle. Cards can override the anchor
@@ -87,7 +132,8 @@ loudly when absent).
   never double-deflated. State series use the national CPI-U (no state CPI).
 - Every card shows dual badges (change since Jan 2025 and since Dec 2019),
   and has Copy-fact / CSV / PNG buttons.
-- Deep links via the URL hash: `#view=state&state=IL&anchor=2019&type=real`.
+- Deep links via the URL hash: `#view=state&state=IL&anchor=2019&type=real`
+  (`view=map&metric=rent` for the map tab; `state=US` is valid).
 - Index-unit series (`rebase: true`) always display as cumulative % change,
   never raw index points. The 2019 anchor is Dec 2019 (not 2020 — avoids COVID
   base effects). Don't change these without flagging it.

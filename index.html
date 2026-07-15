@@ -78,13 +78,22 @@ const ESP = {
 function fmtVal(val, units = '') {
   if (units.includes('%')) return val.toFixed(1) + '%';
   if (units.includes('Billions')) return '$' + val.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + 'B';
-  if (units.includes('$') || units.toLowerCase().includes('gallon') || units.toLowerCase().includes('hour')) {
+  // "Hours of Work" (the derived rent_hours metric) — check before the $
+  // branch so it doesn't collide with "$ per Hour".
+  if (units.toLowerCase().startsWith('hours')) return val.toFixed(1) + ' hrs';
+  if (units.includes('$') || units.toLowerCase().includes('gallon')) {
     return Math.abs(val) >= 1000
       ? '$' + val.toLocaleString(undefined, { maximumFractionDigits: 0 })
       : '$' + val.toFixed(2);
   }
   if (units.includes('Thousands')) return Math.round(val).toLocaleString();
   return val.toFixed(1);
+}
+
+// 1 → "1st", 2 → "2nd", 47 → "47th"
+function ordinal(n) {
+  const s = ['th', 'st', 'nd', 'rd'], v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
 // The three message anchors plus a short and a long window. "Pre-pandemic"
@@ -405,7 +414,8 @@ function buildFactText(item, opts = {}) {
     ? `${item.source_note || 'FRED'} series ${item.fred_id}`
     : (item.source_note || 'federal data');
   const realNote = opts.realYear ? ` (inflation-adjusted to ${opts.realYear} dollars, CPI-U)` : '';
-  return `${level}${changePart}${realNote}. Source: ${src}, via the Economic Security Project Affordability Tracker.`;
+  const rankPart = opts.rankText ? ` — ${opts.rankText}` : '';
+  return `${level}${changePart}${realNote}${rankPart}. Source: ${src}, via the Economic Security Project Affordability Tracker.`;
 }
 
 // Lazy loader for the split state payloads (data/states/*.js and
@@ -426,7 +436,7 @@ function loadDataFile(src) {
 }
 
 Object.assign(window, {
-  ESP, fmtVal, fmtDate, pctChange, valueAt, sliceFrom, downloadCSV, downloadCardAsPNG,
+  ESP, fmtVal, fmtDate, ordinal, pctChange, valueAt, sliceFrom, downloadCSV, downloadCardAsPNG,
   linePath, toPoints, hoursToAfford, REFERENCE_PRICES, scaleByCPI, categoryLabel,
   ANCHORS, anchorById, anchorDate, buildFactText, loadDataFile,
 });
@@ -437,12 +447,13 @@ Object.assign(window, {
 <script type="text/babel" data-presets="react">
 (function() {
 // ── Main app ─────────────────────────────────────────────────────────────────
-// Three views over the same design language:
+// Four views over the same design language:
 //   National        — every national series as selectable chart cards + heatmap
-//   My State        — all metrics for one state, each vs. the US (dashed)
-//   Compare States  — one metric across all states: overlay chart + sparkline grid
+//   My State        — all metrics for one state (US available as an option)
+//   Compare States  — 1–4 metrics, pinned states overlaid (US pinnable too)
+//   Map             — choropleth of all states, one measure at a time
 
-const { ESP, fmtVal, fmtDate, pctChange, valueAt, sliceFrom, downloadCSV, downloadCardAsPNG,
+const { ESP, fmtVal, fmtDate, ordinal, pctChange, valueAt, sliceFrom, downloadCSV, downloadCardAsPNG,
         linePath, toPoints, categoryLabel, hoursToAfford, REFERENCE_PRICES, scaleByCPI,
         ANCHORS, anchorById, anchorDate, buildFactText, loadDataFile } = window;
 const { useState, useMemo, useEffect, useRef } = React;
@@ -495,13 +506,26 @@ function seriesForType(item, cpi, real) {
   return (real && isDeflatable(item)) ? toReal(item.data, cpi) : item.data;
 }
 
+// Alphabetical by label (comms request); chips within each row are
+// alphabetized too, in NationalView.
 const CATEGORY_META = [
-  { id: 'daily',     label: 'Daily items' },
-  { id: 'groceries', label: 'Groceries' },
   { id: 'big',       label: 'Big-ticket' },
-  { id: 'labor',     label: 'Work & wages' },
+  { id: 'daily',     label: 'Daily items' },
   { id: 'debt',      label: 'Debt' },
+  { id: 'groceries', label: 'Groceries' },
+  { id: 'labor',     label: 'Work & wages' },
 ];
+
+// State FIPS → postal, for joining us-atlas topojson features to our data.
+const FIPS_TO_POSTAL = {
+  '01':'AL','02':'AK','04':'AZ','05':'AR','06':'CA','08':'CO','09':'CT','10':'DE',
+  '11':'DC','12':'FL','13':'GA','15':'HI','16':'ID','17':'IL','18':'IN','19':'IA',
+  '20':'KS','21':'KY','22':'LA','23':'ME','24':'MD','25':'MA','26':'MI','27':'MN',
+  '28':'MS','29':'MO','30':'MT','31':'NE','32':'NV','33':'NH','34':'NJ','35':'NM',
+  '36':'NY','37':'NC','38':'ND','39':'OH','40':'OK','41':'OR','42':'PA','44':'RI',
+  '45':'SC','46':'SD','47':'TN','48':'TX','49':'UT','50':'VT','51':'VA','53':'WA',
+  '54':'WV','55':'WI','56':'WY',
+};
 
 // Distinct colors assigned to pinned states in the compare view
 const PIN_COLORS = ['#E04E39', '#7C3AED', '#0D9488', '#B45309', '#DB2777', '#2563EB', '#059669', '#64748B'];
@@ -525,6 +549,30 @@ function loadChartJs() {
     document.head.appendChild(s1);
   });
   return chartJsPromise;
+}
+
+// Lazy-load the choropleth stack once: the self-contained d3 bundle (the
+// standalone d3-geo UMD requires d3-array/internmap loaded separately and
+// breaks alone — verified), topojson-client, and the us-atlas states
+// topology (raw lon/lat — NOT pre-projected; USMap projects with
+// geoAlbersUsa at the standard 975×610 layout). Resolves to GeoJSON features.
+let mapLibsPromise = null;
+function loadMapLibs() {
+  if (mapLibsPromise) return mapLibsPromise;
+  const loadScript = (src) => new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+  mapLibsPromise = Promise.all([
+    loadScript('https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js'),
+    loadScript('https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js'),
+  ])
+    .then(() => fetch('https://cdn.jsdelivr.net/npm/us-atlas@3.0.1/states-10m.json'))
+    .then(r => { if (!r.ok) throw new Error('us-atlas fetch failed'); return r.json(); })
+    .then(topo => window.topojson.feature(topo, topo.objects.states).features)
+    .catch(err => { mapLibsPromise = null; throw err; });
+  return mapLibsPromise;
 }
 
 function hexToRgba(hex, alpha) {
@@ -672,11 +720,11 @@ const styles = {
 };
 
 // ── Copy-fact button (shared by all cards) ──────────────────────────────────
-function CopyFactButton({ item, factLabel, priceType, cpiData }) {
+function CopyFactButton({ item, factLabel, priceType, cpiData, rankText }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
-      style={{ ...styles.smallBtn, ...(copied ? { background: '#2E7D5B', borderColor: '#2E7D5B', color: PAPER } : {}) }}
+      style={{ ...styles.smallBtn, ...(copied ? { background: '#2E7D5B', border: '1px solid #2E7D5B', color: PAPER } : {}) }}
       title="Copy a press-ready sentence with the latest numbers"
       onClick={async () => {
         // Match the copied sentence to what's on screen: deflate first in real
@@ -684,7 +732,7 @@ function CopyFactButton({ item, factLabel, priceType, cpiData }) {
         const realOn = priceType === 'real' && isDeflatable(item);
         const factItem = realOn ? { ...item, data: toReal(item.data, cpiData) } : item;
         const realYear = realOn && cpiData && cpiData.length ? cpiData[cpiData.length - 1].date.slice(0, 4) : null;
-        const text = buildFactText(factItem, { factLabel, realYear });
+        const text = buildFactText(factItem, { factLabel, realYear, rankText });
         try {
           await navigator.clipboard.writeText(text);
           setCopied(true);
@@ -701,7 +749,7 @@ function CopyFactButton({ item, factLabel, priceType, cpiData }) {
 // Transparent background, soft area fill, hover tooltip. `overlayItem` draws
 // a dashed national-comparison line (used on state cards). `displayMode`
 // 'pct' rebases everything to cumulative % change since the anchor.
-function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayItem, factLabel }) {
+function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayItem, factLabel, rankNote, rankText }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
   const cardRef = useRef(null);
@@ -785,6 +833,9 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
       pointHoverBorderWidth: 2,
       tension: 0.32,
       fill: 'start',
+      // Don't clip to the plot area — hover circles on the first/last points
+      // were getting cut in half at the chart edges.
+      clip: false,
     }];
     if (overlayDisplay && overlayDisplay.length) {
       datasets.push({
@@ -797,6 +848,7 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
         pointHoverRadius: 4,
         tension: 0.32,
         fill: false,
+        clip: false,
       });
     }
 
@@ -806,7 +858,9 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        layout: { padding: { top: 8 } },
+        // Left/right padding keeps unclipped hover circles on the endpoints
+        // from being cut by the canvas boundary.
+        layout: { padding: { top: 8, left: 8, right: 8 } },
         animation: { duration: 350, easing: 'easeOutQuart' },
         interaction: { intersect: false, mode: 'index' },
         plugins: {
@@ -923,8 +977,9 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
         </div>
       </div>
 
-      {/* Dual anchor badges — the two numbers a press release needs */}
-      {(b25 != null || b19 != null) && (
+      {/* Dual anchor badges — the two numbers a press release needs — plus
+          the state's national rank when this is a state metric */}
+      {(b25 != null || b19 != null || rankNote) && (
         <div style={{
           fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
           fontSize: 11, display: 'flex', gap: 14, flexWrap: 'wrap',
@@ -933,6 +988,12 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
         }}>
           {badge(b25, "Since Jan '25")}
           {badge(b19, "Since Dec '19")}
+          {rankNote && (
+            <span style={{ whiteSpace: 'nowrap' }}>
+              <span style={{ color: MUTE }}>Rank </span>
+              <span style={{ color: NAVY, fontWeight: 700 }}>{rankNote}</span>
+            </span>
+          )}
         </div>
       )}
 
@@ -998,7 +1059,7 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
           <span>{item.source_note || 'Derived from public data'}</span>
         )}
         <span style={{ display: 'flex', gap: 8, alignItems: 'center' }} data-export-hide>
-          <CopyFactButton item={item} factLabel={factLabel} priceType={priceType} cpiData={cpiData} />
+          <CopyFactButton item={item} factLabel={factLabel} priceType={priceType} cpiData={cpiData} rankText={rankText} />
           <button
             onClick={() => downloadCSV(item)}
             style={styles.smallBtn}
@@ -1204,13 +1265,28 @@ function NationalView({ data, anchorId, displayMode, priceType }) {
   );
   const byCategory = useMemo(() => {
     const m = {};
-    CATEGORY_META.forEach(c => { m[c.id] = allItems.filter(i => i.category === c.id); });
+    CATEGORY_META.forEach(c => {
+      m[c.id] = allItems
+        .filter(i => i.category === c.id)
+        .sort((a, b) => a.label.localeCompare(b.label)); // alphabetical chips
+    });
     return m;
   }, [allItems]);
 
   const [selectedIds, setSelectedIds] = useState(() =>
     new Set(allItems.filter(i => i.category === 'daily').map(i => i.id))
   );
+
+  // Collapsible category rows (41 chips was too busy): rows start collapsed,
+  // showing just the pill + a selected count; the chevron expands the chips.
+  const [openCats, setOpenCats] = useState(() => new Set());
+  const toggleOpen = (id) => {
+    setOpenCats(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
 
   const toggleId = (id) => {
     setSelectedIds(prev => {
@@ -1240,7 +1316,10 @@ function NationalView({ data, anchorId, displayMode, priceType }) {
     });
   };
 
-  const selectedItems = allItems.filter(i => selectedIds.has(i.id));
+  // Cards render in category order, alphabetical within each category —
+  // matching the chip rows above.
+  const selectedItems = CATEGORY_META.flatMap(c =>
+    (byCategory[c.id] || []).filter(i => selectedIds.has(i.id)));
   const anchor = anchorById(anchorId);
 
   return (
@@ -1251,22 +1330,56 @@ function NationalView({ data, anchorId, displayMode, priceType }) {
         padding: '16px 56px 18px',
         display: 'flex', flexDirection: 'column', gap: 10,
       }}>
-        {CATEGORY_META.map(cat => (
-          <div key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <button onClick={() => toggleCategory(cat.id)} style={{ ...styles.catPill(catState(cat.id)), width: 130, textAlign: 'center' }}>
-              {cat.label}
-            </button>
-            {(byCategory[cat.id] || []).map(item => {
-              const on = selectedIds.has(item.id);
-              return (
-                <button key={item.id} onClick={() => toggleId(item.id)} style={styles.checkChip(on, item.color || WARM_RED)}>
-                  <span style={styles.checkBox(on, item.color || WARM_RED)}>{on ? '✓' : ''}</span>
-                  {item.label}
+        {CATEGORY_META.map(cat => {
+          const items = byCategory[cat.id] || [];
+          const nOn = items.filter(i => selectedIds.has(i.id)).length;
+          const open = openCats.has(cat.id);
+          return (
+            <div key={cat.id} style={{ borderBottom: '1px solid rgba(27,42,78,.08)', paddingBottom: open ? 12 : 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button onClick={() => toggleCategory(cat.id)}
+                        title="Select or clear every metric in this category"
+                        style={{ ...styles.catPill(catState(cat.id)), width: 130, textAlign: 'center' }}>
+                  {cat.label}
                 </button>
-              );
-            })}
-          </div>
-        ))}
+                <button
+                  onClick={() => toggleOpen(cat.id)}
+                  aria-expanded={open}
+                  title={open ? 'Hide the metrics in this category' : 'Show the metrics in this category'}
+                  style={{
+                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 10, background: 'transparent', border: 'none', cursor: 'pointer',
+                    padding: '6px 4px', textAlign: 'left',
+                  }}
+                >
+                  <span style={{
+                    fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic',
+                    fontSize: 12.5, color: nOn ? INK : MUTE,
+                  }}>
+                    {nOn ? `${nOn} of ${items.length} selected` : `${items.length} metrics`}
+                  </span>
+                  <span style={{
+                    fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+                    fontSize: 11, fontWeight: 700, color: NAVY, flexShrink: 0,
+                  }}>{open ? '▴ Hide' : '▾ Show'}</span>
+                </button>
+              </div>
+              {open && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                  {items.map(item => {
+                    const on = selectedIds.has(item.id);
+                    return (
+                      <button key={item.id} onClick={() => toggleId(item.id)} style={styles.checkChip(on, item.color || WARM_RED)}>
+                        <span style={styles.checkBox(on, item.color || WARM_RED)}>{on ? '✓' : ''}</span>
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
         <div style={{ display: 'flex', gap: 16, marginTop: 2 }}>
           <button
             onClick={() => setSelectedIds(new Set(allItems.map(i => i.id)))}
@@ -1346,10 +1459,12 @@ function fmtAnnual(value, units) {
 function StateView({ data, code, setCode, anchorId, displayMode, priceType }) {
   const cpiData = data.cpi_all_items ? data.cpi_all_items.data : null;
   const idx = window.AFFORDABILITY_STATES;
+  const isUS = code === 'US';
   const [status, setStatus] = useState('loading');
 
   useEffect(() => {
     let live = true;
+    if (code === 'US') { setStatus('ready'); return; } // national data is already loaded
     setStatus('loading');
     loadDataFile(`data/states/${code.toLowerCase()}.js`)
       .then(() => { if (live) setStatus('ready'); })
@@ -1357,14 +1472,28 @@ function StateView({ data, code, setCode, anchorId, displayMode, priceType }) {
     return () => { live = false; };
   }, [code]);
 
-  const stateList = idx ? idx.states : [];
+  // "United States" is just another option in the picker (comms request) —
+  // its metric series come from the already-loaded national payload.
+  const stateList = idx ? [{ code: 'US', name: 'United States' }, ...idx.states] : [];
   const pos = stateList.findIndex(s => s.code === code);
   const step = (d) => {
     const n = stateList[(pos + d + stateList.length) % stateList.length];
     if (n) setCode(n.code);
   };
 
-  const sd = (status === 'ready' && window.STATE_DATA) ? window.STATE_DATA[code] : null;
+  const sd = isUS
+    ? (() => {
+        const metrics = {};
+        idx && idx.metrics.forEach(m => {
+          const nat = m.national_id && data[m.national_id];
+          if (nat) metrics[m.id] = {
+            fred_id: nat.fred_id, latest_value: nat.latest_value,
+            latest_date: nat.latest_date, data: nat.data,
+          };
+        });
+        return { name: 'United States', metrics, annual: {} };
+      })()
+    : ((status === 'ready' && window.STATE_DATA) ? window.STATE_DATA[code] : null);
 
   const picker = (
     <div className="at-pad" style={{
@@ -1380,7 +1509,7 @@ function StateView({ data, code, setCode, anchorId, displayMode, priceType }) {
       <button onClick={() => step(1)} style={{ ...styles.smallBtn, padding: '8px 10px', fontSize: 12 }}>→</button>
       <span style={{
         fontFamily: 'Publico, Georgia, serif', fontSize: 13, fontStyle: 'italic', color: MUTE,
-      }}>Every chart shows this state against the US average (dashed).</span>
+      }}>Pick a state — or United States — to see every metric we track for it.</span>
     </div>
   );
 
@@ -1398,6 +1527,8 @@ function StateView({ data, code, setCode, anchorId, displayMode, priceType }) {
 
   const cards = idx.metrics
     .filter(m => sd.metrics && sd.metrics[m.id])
+    .slice()
+    .sort((a, b) => a.label.localeCompare(b.label)) // alphabetical (comms request)
     .map(m => {
       const sm = sd.metrics[m.id];
       const coverageNote = sm.coverage && sm.coverage < 1
@@ -1421,8 +1552,14 @@ function StateView({ data, code, setCode, anchorId, displayMode, priceType }) {
         latest_date: sm.latest_date,
         data: sm.data,
       };
-      const overlay = m.national_id && data[m.national_id] ? data[m.national_id] : null;
-      return { item, overlay, factLabel: `${sd.name} — ${m.label}` };
+      // Build-time national rank (1 = highest value), baked into the payload
+      // by fetch_data.R. "Highest" is direction-neutral phrasing: highest
+      // rent is bad, highest income is good — the color badges say which.
+      const rankNote = sm.rank != null && sm.rank_n != null
+        ? `${ordinal(sm.rank)} highest of ${sm.rank_n}` : null;
+      const rankText = sm.rank != null && sm.rank_n != null
+        ? `the ${ordinal(sm.rank)} highest among ${sm.rank_n} states` : null;
+      return { item, factLabel: `${sd.name} — ${m.label}`, rankNote, rankText };
     });
 
   const annualTiles = (idx.annual || []).filter(a => sd.annual && sd.annual[a.id] != null);
@@ -1435,13 +1572,15 @@ function StateView({ data, code, setCode, anchorId, displayMode, priceType }) {
           <span style={styles.sectionLabel}>§01</span>
           <span style={styles.sectionTitle}>{sd.name}</span>
           <span className="at-section-dek" style={styles.sectionDek}>
-            No state-level CPI exists — these are the price and income series that do.
+            {isUS
+              ? 'The national versions of every state metric.'
+              : 'No state-level CPI exists — these are the price and income series that do.'}
           </span>
         </div>
 
         <div className="at-cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 0,
           border: `1px solid rgba(27,42,78,.14)` }}>
-          {cards.map(({ item, overlay, factLabel }, i) => {
+          {cards.map(({ item, factLabel, rankNote, rankText }, i) => {
             const col = i % 2;
             const row = Math.floor(i / 2);
             const lastRow = Math.floor((cards.length - 1) / 2);
@@ -1452,7 +1591,8 @@ function StateView({ data, code, setCode, anchorId, displayMode, priceType }) {
               }}>
                 <ChartCard item={item} anchorId={anchorId} displayMode={displayMode}
                            priceType={priceType} cpiData={cpiData}
-                           overlayItem={overlay} factLabel={factLabel} />
+                           factLabel={factLabel}
+                           rankNote={rankNote} rankText={rankText} />
               </div>
             );
           })}
@@ -1496,18 +1636,8 @@ function StateView({ data, code, setCode, anchorId, displayMode, priceType }) {
   );
 }
 
-// ── Compare view: one metric, all states ────────────────────────────────────
-function Sparkline({ data, color, w = 130, h = 34 }) {
-  const pts = toPoints(data, w, h);
-  if (!pts.length) return <div style={{ height: h }} />;
-  return (
-    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block' }}>
-      <path d={linePath(pts)} fill="none" stroke={color} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-    </svg>
-  );
-}
-
-function CompareChart({ metric, seriesList, anchorId, displayMode }) {
+// ── Compare view: overlay chart(s), pinned states (US pinnable too) ─────────
+function CompareChart({ metric, seriesList, anchorId, displayMode, height = 340 }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
   const [chartReady, setChartReady] = useState(!!window.Chart);
@@ -1538,6 +1668,7 @@ function CompareChart({ metric, seriesList, anchorId, displayMode }) {
         pointHoverRadius: 4,
         tension: 0.32,
         fill: false,
+        clip: false, // endpoint hover circles were half-clipped at the edges
       };
     });
 
@@ -1549,6 +1680,7 @@ function CompareChart({ metric, seriesList, anchorId, displayMode }) {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: { padding: { top: 8, left: 8, right: 8 } },
         animation: { duration: 350, easing: 'easeOutQuart' },
         interaction: { intersect: false, mode: 'index' },
         plugins: {
@@ -1589,33 +1721,262 @@ function CompareChart({ metric, seriesList, anchorId, displayMode }) {
   }, [chartReady, metric, seriesList, anchorId, displayMode]);
 
   return (
-    <div style={{ height: 340, position: 'relative' }}>
+    <div style={{ height, position: 'relative' }}>
       <canvas ref={canvasRef} />
     </div>
   );
 }
 
-function CompareView({ data, metricId, setMetricId, homeState, anchorId, displayMode, priceType }) {
-  const idx = window.AFFORDABILITY_STATES;
-  const cpiData = data.cpi_all_items ? data.cpi_all_items.data : null;
-  const [status, setStatus] = useState('loading');
-  const [pinned, setPinned] = useState(() => [homeState].filter(Boolean));
-  const [sortBy, setSortBy] = useState('az');
+// ── Choropleth map: one metric, all states ──────────────────────────────────
+// D3-geo + topojson-client + the pre-projected us-atlas states topology
+// (lazy-loaded from jsDelivr the first time the map is opened). Two color
+// modes: change since the active anchor (diverging, red = worse — flipped
+// for metrics where rising is good) and latest level (beige → navy).
+// `onPick` is optional — when provided, clicking a state pins it.
+function USMap({ metric, rows, pinned = [], onPick, anchorPhrase, mapMode }) {
+  const [feats, setFeats] = useState(null);
+  const [err, setErr] = useState(false);
+  const [tip, setTip] = useState(null);
+  const boxRef = useRef(null);
 
   useEffect(() => {
     let live = true;
-    setStatus('loading');
-    loadDataFile(`data/state_metrics/${metricId}.js`)
-      .then(() => { if (live) setStatus('ready'); })
-      .catch(() => { if (live) setStatus('error'); });
+    loadMapLibs()
+      .then(f => { if (live) setFeats(f); })
+      .catch(() => { if (live) setErr(true); });
     return () => { live = false; };
-  }, [metricId]);
+  }, []);
+
+  const byCode = useMemo(() => {
+    const m = {};
+    rows.forEach(r => { m[r.code] = r; });
+    return m;
+  }, [rows]);
+
+  // Project once per topology load, not per render: geoAlbersUsa at the
+  // standard 975×610 layout (composite projection — Alaska/Hawaii insets;
+  // territories return no path and are dropped along with non-state ids).
+  const shapes = useMemo(() => {
+    if (!feats || !window.d3) return null;
+    const path = window.d3.geoPath(window.d3.geoAlbersUsa().scale(1300).translate([487.5, 305]));
+    return feats
+      .map(f => ({ id: f.id, code: FIPS_TO_POSTAL[f.id], d: path(f) }))
+      .filter(s => s.code && s.d);
+  }, [feats]);
+
+  if (err) {
+    return (
+      <div style={{
+        background: PAPER, border: '1px solid rgba(27,42,78,.18)', padding: '48px 32px',
+        textAlign: 'center', fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE,
+      }}>Could not load the map assets (offline?). The Compare States view has the same data.</div>
+    );
+  }
+  if (!feats) {
+    return (
+      <div style={{ padding: '48px 0', textAlign: 'center', fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE }}>
+        Loading map…
+      </div>
+    );
+  }
+
+  const valOf = (r) => r == null ? null : (mapMode === 'level' ? r.latest : r.change);
+  const vals = rows.map(valOf).filter(v => v != null && isFinite(v));
+  const NO_DATA = '#E9DFC8';
+
+  // Same diverging palette as the heatmap (beige→red / beige→green), so the
+  // views read as one family. `flip` handles metrics where rising is good.
+  const flip = metric.invert_color ? -1 : 1;
+  const maxAbs = Math.max(1, ...vals.map(v => Math.abs(v)));
+  const divergingColor = (v) => {
+    if (v == null || !isFinite(v)) return NO_DATA;
+    const clamp = Math.max(-maxAbs, Math.min(maxAbs, v * flip));
+    const a = Math.abs(clamp) / maxAbs;
+    const lerp = (s, e) => Math.round(s + (e - s) * a);
+    if (clamp > 0) return `rgb(${lerp(244, 224)},${lerp(236, 78)},${lerp(216, 57)})`;
+    return `rgb(${lerp(244, 46)},${lerp(236, 125)},${lerp(216, 91)})`;
+  };
+  const lvlMin = vals.length ? Math.min(...vals) : 0;
+  const lvlMax = vals.length ? Math.max(...vals) : 1;
+  const levelColor = (v) => {
+    if (v == null || !isFinite(v)) return NO_DATA;
+    const t = lvlMax > lvlMin ? (v - lvlMin) / (lvlMax - lvlMin) : 0.5;
+    const lerp = (s, e) => Math.round(s + (e - s) * t);
+    return `rgb(${lerp(244, 27)},${lerp(236, 42)},${lerp(216, 78)})`;
+  };
+  const fillFor = (v) => mapMode === 'level' ? levelColor(v) : divergingColor(v);
+
+  const move = (e, code) => {
+    const rect = boxRef.current ? boxRef.current.getBoundingClientRect() : { left: 0, top: 0, width: 0 };
+    setTip({ code, x: e.clientX - rect.left, y: e.clientY - rect.top, w: rect.width });
+  };
+
+  const tipRow = tip ? byCode[tip.code] : null;
+  const legendGrad = mapMode === 'level'
+    ? `linear-gradient(90deg, ${levelColor(lvlMin)}, ${levelColor((lvlMin + lvlMax) / 2)}, ${levelColor(lvlMax)})`
+    : `linear-gradient(90deg, ${divergingColor(-maxAbs * flip)}, ${divergingColor(0)}, ${divergingColor(maxAbs * flip)})`;
+
+  return (
+    <div ref={boxRef} style={{ position: 'relative', background: PAPER, border: '1px solid rgba(27,42,78,.18)', padding: '20px 20px 12px' }}>
+      <svg viewBox="0 0 975 610" style={{ width: '100%', display: 'block' }}>
+        {(shapes || []).map(s => {
+          const r = byCode[s.code];
+          return (
+            <path
+              key={s.id}
+              d={s.d}
+              fill={fillFor(valOf(r))}
+              stroke={PAPER}
+              strokeWidth="1"
+              style={{ cursor: r && onPick ? 'pointer' : 'default' }}
+              onClick={() => { if (r && onPick) onPick(s.code); }}
+              onMouseMove={(e) => move(e, s.code)}
+              onMouseLeave={() => setTip(null)}
+            />
+          );
+        })}
+        {/* pinned outlines drawn on top */}
+        {(shapes || []).map(s => {
+          const pi = pinned.indexOf(s.code);
+          if (pi < 0) return null;
+          return (
+            <path key={'pin' + s.id} d={s.d} fill="none" pointerEvents="none"
+                  stroke={PIN_COLORS[pi % PIN_COLORS.length]} strokeWidth="2.5" />
+          );
+        })}
+      </svg>
+
+      {tip && (
+        <div style={{
+          position: 'absolute',
+          left: Math.min(tip.x + 14, (tip.w || 300) - 190), top: tip.y + 14,
+          background: NAVY, color: PAPER, padding: '9px 12px', borderRadius: 4,
+          pointerEvents: 'none', zIndex: 5, width: 180,
+          fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif', fontSize: 12,
+          boxShadow: '0 6px 18px rgba(0,0,0,.25)',
+        }}>
+          <div style={{ fontWeight: 800, marginBottom: 3 }}>{tipRow ? tipRow.name : tip.code}</div>
+          {tipRow ? (
+            <React.Fragment>
+              <div>{tipRow.latest != null ? fmtVal(tipRow.latest, metric.units) : '—'}
+                {tipRow.change != null && (
+                  <span style={{ color: '#E8C9A8' }}> · {(tipRow.change >= 0 ? '+' : '−') + Math.abs(tipRow.change).toFixed(1)}% {anchorPhrase}</span>
+                )}
+              </div>
+              {tipRow.rank != null && (
+                <div style={{ color: '#9BA8C2', marginTop: 2 }}>{ordinal(tipRow.rank)} highest of {tipRow.rankN}</div>
+              )}
+              {onPick && (
+                <div style={{ color: '#9BA8C2', marginTop: 3, fontSize: 10 }}>Click to pin on the chart</div>
+              )}
+            </React.Fragment>
+          ) : (
+            <div style={{ color: '#9BA8C2' }}>No data for this state</div>
+          )}
+        </div>
+      )}
+
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 8,
+        fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif', fontSize: 10, color: MUTE,
+      }}>
+        <span style={{ fontStyle: 'italic', fontFamily: 'Publico, Georgia, serif', fontSize: 12 }}>
+          {mapMode === 'level' ? `Latest ${metric.label.toLowerCase()}` : `Change ${anchorPhrase}`} · gray = no data
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>{mapMode === 'level' ? fmtVal(lvlMin, metric.units) : `−${maxAbs.toFixed(0)}%`}</span>
+          <span style={{ width: 120, height: 10, background: legendGrad, display: 'inline-block' }} />
+          <span>{mapMode === 'level' ? fmtVal(lvlMax, metric.units) : `+${maxAbs.toFixed(0)}%`}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// One overlay-chart panel (US average + pinned states) for one metric. The
+// multi-metric compare renders up to four of these side by side; the panel
+// reads the already-lazy-loaded window.STATE_METRIC payload.
+function CompareMetricPanel({ metric, data, pinned, names, anchorId, displayMode, priceType, cpiData, compact, failed }) {
+  const md = window.STATE_METRIC ? window.STATE_METRIC[metric.id] : null;
+  const metricReal = priceType === 'real' && isDeflatable({ id: metric.id, units: metric.units });
+  const deflate = (arr) => metricReal ? toReal(arr, cpiData) : arr;
+
+  // The US average is not drawn by default — it's pinnable like any state
+  // (code 'US' reads the already-loaded national payload).
+  const seriesList = [];
+  const natItem = metric.national_id && data[metric.national_id];
+  if (md) pinned.forEach((code, i) => {
+    const s = code === 'US' ? (natItem ? { data: natItem.data } : null) : md.states[code];
+    if (s) seriesList.push({ label: names[code] || code, color: PIN_COLORS[i % PIN_COLORS.length], data: deflate(s.data) });
+  });
+
+  return (
+    <div style={{ background: 'transparent', borderTop: `2px solid ${metric.color}`, padding: '14px 2px 10px', minWidth: 0 }}>
+      {compact && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+          <span style={{ fontFamily: 'Publico, Georgia, serif', fontSize: 17, fontWeight: 600, color: INK }}>{metric.label}</span>
+          <span style={{
+            fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif', fontSize: 10, color: SOFT,
+            textTransform: 'uppercase', letterSpacing: '.06em', textAlign: 'right',
+          }}>{metric.source_label} · {metric.frequency}</span>
+        </div>
+      )}
+      {failed ? (
+        <div style={{ padding: '40px 0', textAlign: 'center', fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE }}>
+          Could not load this metric.
+        </div>
+      ) : !md ? (
+        <div style={{ padding: '40px 0', textAlign: 'center', fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE }}>
+          Loading…
+        </div>
+      ) : seriesList.length === 0 ? (
+        <div style={{ padding: '40px 0', textAlign: 'center', fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE }}>
+          Add a state to draw the comparison.
+        </div>
+      ) : (
+        <CompareChart metric={metric} seriesList={seriesList} anchorId={anchorId}
+                      displayMode={displayMode} height={compact ? 250 : 340} />
+      )}
+    </div>
+  );
+}
+
+function CompareView({ data, metricIds, setMetricIds, homeState, anchorId, displayMode, priceType }) {
+  const idx = window.AFFORDABILITY_STATES;
+  const cpiData = data.cpi_all_items ? data.cpi_all_items.data : null;
+  const [pinned, setPinned] = useState(() => [homeState].filter(Boolean));
+  // Bumped as each state_metrics/{id}.js lands; failures tracked per id.
+  const [, setLoadTick] = useState(0);
+  const [failedIds, setFailedIds] = useState(() => new Set());
+
+  useEffect(() => {
+    let live = true;
+    metricIds.forEach(id => {
+      loadDataFile(`data/state_metrics/${id}.js`)
+        .then(() => { if (live) setLoadTick(t => t + 1); })
+        .catch(() => { if (live) setFailedIds(prev => new Set(prev).add(id)); });
+    });
+    return () => { live = false; };
+  }, [metricIds.join(',')]);
 
   if (!idx) return null;
-  const metric = idx.metrics.find(m => m.id === metricId) || idx.metrics[0];
-  const md = (status === 'ready' && window.STATE_METRIC) ? window.STATE_METRIC[metricId] : null;
+  // Metric pills are multi-select (up to 4 — the small-multiples request):
+  // clicking adds a panel, clicking again removes it; the first selected
+  // metric drives the all-states grid / map below.
+  const metricsSorted = idx.metrics.slice().sort((a, b) => a.label.localeCompare(b.label));
+  const metrics = metricIds.map(id => idx.metrics.find(m => m.id === id)).filter(Boolean);
+  const metric = metrics[0] || idx.metrics[0];
+  const toggleMetric = (id) => {
+    if (metricIds.includes(id)) {
+      if (metricIds.length > 1) setMetricIds(metricIds.filter(m => m !== id));
+    } else {
+      setMetricIds(metricIds.length >= 4 ? [...metricIds.slice(0, 3), id] : [...metricIds, id]);
+    }
+  };
+  const md = window.STATE_METRIC ? window.STATE_METRIC[metric.id] : null;
+  const primaryFailed = failedIds.has(metric.id);
 
-  const names = {};
+  const names = { US: 'United States' };
   idx.states.forEach(s => { names[s.code] = s.name; });
 
   const togglePin = (code) => {
@@ -1626,42 +1987,18 @@ function CompareView({ data, metricId, setMetricId, homeState, anchorId, display
     });
   };
 
-  const anchorD = anchorDate(anchorId, null);
-  const asPct = metric.rebase || displayMode === 'pct';
-  // One global switch: deflate every state's series (and the US line) when the
-  // metric is a dollar/index measure. No state CPI exists, so state values are
-  // deflated by the national CPI-U — the standard fallback.
-  const metricReal = priceType === 'real' && isDeflatable({ id: metric.id, units: metric.units });
-  const deflate = (arr) => metricReal ? toReal(arr, cpiData) : arr;
-
-  let rows = [];
+  // "+ Add" dropdown: the US average is just another option, listed first.
+  let stateOptions = [];
   if (md) {
-    rows = Object.keys(md.states).map(code => {
-      const s = md.states[code];
-      const d = deflate(s.data);
-      return {
-        code,
-        name: names[code] || code,
-        latest: d.length ? d[d.length - 1].value : s.latest_value,
-        change: pctChange(d, anchorId === 'max' ? d[0].date : anchorD),
-        data: d,
-      };
-    });
-    rows.sort(sortBy === 'az'
-      ? (a, b) => a.name.localeCompare(b.name)
-      : (a, b) => (b.change ?? -Infinity) - (a.change ?? -Infinity));
+    stateOptions = Object.keys(md.states)
+      .map(code => ({ code, name: names[code] || code }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    if (metric.national_id && data[metric.national_id]) {
+      stateOptions.unshift({ code: 'US', name: 'United States' });
+    }
   }
 
-  // Overlay chart series: US national (dashed) + pinned states
-  const seriesList = [];
-  const natItem = metric.national_id && data[metric.national_id];
-  if (natItem) seriesList.push({ label: 'US', color: hexToRgba(NAVY, 0.75), dashed: true, data: deflate(natItem.data) });
-  pinned.forEach((code, i) => {
-    const s = md && md.states[code];
-    if (s) seriesList.push({ label: names[code] || code, color: PIN_COLORS[i % PIN_COLORS.length], data: deflate(s.data) });
-  });
-
-  const changeColorFor = (v) => v == null ? MUTE : (metric.invert_color ? v < 0 : v >= 0) ? WARM_RED : '#2E7D5B';
+  const status = primaryFailed ? 'error' : (md ? 'ready' : 'loading');
 
   return (
     <React.Fragment>
@@ -1671,21 +2008,26 @@ function CompareView({ data, metricId, setMetricId, homeState, anchorId, display
         padding: '16px 56px',
         display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
       }}>
-        <span style={styles.controlLabel}>Metric</span>
-        {idx.metrics.map(m => {
-          const on = m.id === metric.id;
+        <span style={styles.controlLabel}>Metrics</span>
+        {metricsSorted.map(m => {
+          const on = metricIds.includes(m.id);
           return (
-            <button key={m.id} onClick={() => setMetricId(m.id)} style={{
-              fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-              fontSize: 13, fontWeight: on ? 700 : 600,
-              padding: '8px 15px',
-              border: `1.5px solid ${on ? NAVY : 'rgba(27,42,78,.22)'}`,
-              background: on ? NAVY : 'transparent',
-              color: on ? PAPER : INK,
-              cursor: 'pointer', borderRadius: 100,
-            }}>{m.label}</button>
+            <button key={m.id} onClick={() => toggleMetric(m.id)}
+              title={on ? 'Remove this chart' : 'Add this chart (up to 4)'}
+              style={{
+                fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+                fontSize: 13, fontWeight: on ? 700 : 600,
+                padding: '8px 15px',
+                border: `1.5px solid ${on ? NAVY : 'rgba(27,42,78,.22)'}`,
+                background: on ? NAVY : 'transparent',
+                color: on ? PAPER : INK,
+                cursor: 'pointer', borderRadius: 100,
+              }}>{on && metricIds.length > 1 ? '✓ ' : ''}{m.label}</button>
           );
         })}
+        <span style={{
+          fontFamily: 'Publico, Georgia, serif', fontSize: 12.5, fontStyle: 'italic', color: MUTE,
+        }}>Pick up to four to compare side by side.</span>
       </div>
 
       <div className="at-pad" style={{ padding: '36px 56px 56px' }}>
@@ -1697,21 +2039,16 @@ function CompareView({ data, metricId, setMetricId, homeState, anchorId, display
           <React.Fragment>
             <div className="at-section-head" style={styles.sectionHead}>
               <span style={styles.sectionLabel}>§01</span>
-              <span style={styles.sectionTitle}>{metric.label} — pick states to overlay</span>
-              <span className="at-section-dek" style={styles.sectionDek}>{metric.source_label} · {metric.frequency}</span>
+              <span style={styles.sectionTitle}>
+                {metrics.length === 1 ? `${metric.label} — pick states to overlay` : `${metrics.length} metrics, side by side`}
+              </span>
+              <span className="at-section-dek" style={styles.sectionDek}>
+                {metrics.length === 1 ? `${metric.source_label} · ${metric.frequency}` : 'Same pinned states on every panel.'}
+              </span>
             </div>
 
             {/* Pinned chips + add control */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-              {natItem && (
-                <span style={{
-                  fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif', fontSize: 12, fontWeight: 700,
-                  display: 'inline-flex', alignItems: 'center', gap: 7,
-                  padding: '6px 12px', border: `1px dashed ${hexToRgba(NAVY, 0.5)}`, color: NAVY, borderRadius: 100,
-                }}>
-                  <span style={{ width: 16, borderTop: `2px dashed ${hexToRgba(NAVY, 0.75)}` }} /> US average
-                </span>
-              )}
               {pinned.map((code, i) => (
                 <button key={code} onClick={() => togglePin(code)} style={{
                   fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif', fontSize: 12, fontWeight: 700,
@@ -1730,73 +2067,137 @@ function CompareView({ data, metricId, setMetricId, homeState, anchorId, display
                 style={{ ...styles.select, padding: '7px 10px', fontSize: 13 }}
               >
                 <option value="">+ Add a state…</option>
-                {rows.filter(r => !pinned.includes(r.code)).map(r => (
+                {stateOptions.filter(r => !pinned.includes(r.code)).map(r => (
                   <option key={r.code} value={r.code}>{r.name}</option>
                 ))}
               </select>
             </div>
 
-            <div style={{ background: 'transparent', borderTop: `2px solid ${metric.color}`, padding: '18px 2px 12px' }}>
-              {seriesList.length === 0 ? (
-                <div style={{ padding: '60px 0', textAlign: 'center', fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE }}>
-                  Add a state to draw the comparison.
-                </div>
-              ) : (
-                <CompareChart metric={metric} seriesList={seriesList} anchorId={anchorId} displayMode={displayMode} />
-              )}
+            <div style={metrics.length === 1 ? {} : {
+              display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '0 28px',
+            }}>
+              {metrics.map(m => (
+                <CompareMetricPanel key={m.id} metric={m} data={data} pinned={pinned} names={names}
+                                    anchorId={anchorId} displayMode={displayMode} priceType={priceType}
+                                    cpiData={cpiData} compact={metrics.length > 1}
+                                    failed={failedIds.has(m.id)} />
+              ))}
             </div>
 
-            <div className="at-section-head" style={{ ...styles.sectionHead, marginTop: 48 }}>
-              <span style={styles.sectionLabel}>§02</span>
-              <span style={styles.sectionTitle}>All states</span>
-              <span className="at-section-dek" style={styles.sectionDek}>Click any state to add it to the chart above.</span>
-              <span style={{ display: 'flex', gap: 6, marginLeft: 16 }}>
-                <button onClick={() => setSortBy('az')} style={styles.modeBtn(sortBy === 'az')}>A–Z</button>
-                <button onClick={() => setSortBy('change')} style={styles.modeBtn(sortBy === 'change')}>Biggest change</button>
+          </React.Fragment>
+        )}
+      </div>
+    </React.Fragment>
+  );
+}
+
+// ── Map view: the US choropleth as its own tab, one metric at a time ────────
+function MapView({ data, metricId, setMetricId, anchorId, priceType }) {
+  const idx = window.AFFORDABILITY_STATES;
+  const cpiData = data.cpi_all_items ? data.cpi_all_items.data : null;
+  const [mapMode, setMapMode] = useState('change'); // 'change' | 'level'
+  const [, setLoadTick] = useState(0);
+  const [failedIds, setFailedIds] = useState(() => new Set());
+
+  useEffect(() => {
+    let live = true;
+    loadDataFile(`data/state_metrics/${metricId}.js`)
+      .then(() => { if (live) setLoadTick(t => t + 1); })
+      .catch(() => { if (live) setFailedIds(prev => new Set(prev).add(metricId)); });
+    return () => { live = false; };
+  }, [metricId]);
+
+  if (!idx) return null;
+  const metricsSorted = idx.metrics.slice().sort((a, b) => a.label.localeCompare(b.label));
+  const metric = idx.metrics.find(m => m.id === metricId) || idx.metrics[0];
+  const md = window.STATE_METRIC ? window.STATE_METRIC[metric.id] : null;
+  const status = failedIds.has(metric.id) ? 'error' : (md ? 'ready' : 'loading');
+
+  const names = {};
+  idx.states.forEach(s => { names[s.code] = s.name; });
+
+  const anchorD = anchorDate(anchorId, null);
+  // Deflate dollar/index metrics when the global switch is Real. No state CPI
+  // exists, so state values use the national CPI-U — the standard fallback.
+  const metricReal = priceType === 'real' && isDeflatable({ id: metric.id, units: metric.units });
+  const deflate = (arr) => metricReal ? toReal(arr, cpiData) : arr;
+
+  let rows = [];
+  if (md) {
+    rows = Object.keys(md.states).map(code => {
+      const s = md.states[code];
+      const d = deflate(s.data);
+      return {
+        code,
+        name: names[code] || code,
+        latest: d.length ? d[d.length - 1].value : s.latest_value,
+        change: pctChange(d, anchorId === 'max' ? d[0].date : anchorD),
+        rank: s.rank ?? null,     // build-time rank from fetch_data.R
+        rankN: s.rank_n ?? null,
+      };
+    });
+    // Client-side fallback ranks (latest value, 1 = highest) for payloads
+    // generated before build-time rankings existed.
+    const ranked = rows.filter(r => r.latest != null).slice().sort((a, b) => b.latest - a.latest);
+    ranked.forEach((r, i) => {
+      if (r.rank == null) { r.rank = i + 1; r.rankN = ranked.length; }
+      else if (r.rankN == null) { r.rankN = ranked.length; }
+    });
+  }
+
+  return (
+    <React.Fragment>
+      {/* Measure picker — single-select: the map shows one metric at a time */}
+      <div className="at-pad" style={{
+        background: PAPER, borderBottom: `1px solid rgba(27,42,78,.18)`,
+        padding: '16px 56px',
+        display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+      }}>
+        <span style={styles.controlLabel}>Measure</span>
+        {metricsSorted.map(m => {
+          const on = m.id === metric.id;
+          return (
+            <button key={m.id} onClick={() => setMetricId(m.id)}
+              style={{
+                fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+                fontSize: 13, fontWeight: on ? 700 : 600,
+                padding: '8px 15px',
+                border: `1.5px solid ${on ? NAVY : 'rgba(27,42,78,.22)'}`,
+                background: on ? NAVY : 'transparent',
+                color: on ? PAPER : INK,
+                cursor: 'pointer', borderRadius: 100,
+              }}>{m.label}</button>
+          );
+        })}
+      </div>
+
+      <div className="at-pad" style={{ padding: '36px 56px 56px' }}>
+        {status !== 'ready' || !md ? (
+          <div style={{ padding: '48px 0', fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE }}>
+            {status === 'error' ? 'Could not load this metric.' : 'Loading state data…'}
+          </div>
+        ) : (
+          <React.Fragment>
+            <div className="at-section-head" style={styles.sectionHead}>
+              <span style={styles.sectionLabel}>§01</span>
+              <span style={styles.sectionTitle}>All states — {metric.label}</span>
+              <span className="at-section-dek" style={styles.sectionDek}>
+                {metric.source_label} · {metric.frequency} · hover any state for its values.
+              </span>
+              <span style={{ display: 'flex', gap: 6, marginLeft: 16, flexWrap: 'wrap' }}>
+                <button onClick={() => setMapMode('change')} style={styles.modeBtn(mapMode === 'change')}>Change</button>
+                <button onClick={() => setMapMode('level')} style={styles.modeBtn(mapMode === 'level')}>Level</button>
               </span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 10 }}>
-              {rows.map(r => {
-                const isPinned = pinned.includes(r.code);
-                const pinColor = isPinned ? PIN_COLORS[pinned.indexOf(r.code) % PIN_COLORS.length] : metric.color;
-                const spark = sliceFrom(r.data, anchorDate(anchorId === 'max' ? '2000' : anchorId, r.data));
-                return (
-                  <button key={r.code} onClick={() => togglePin(r.code)} style={{
-                    textAlign: 'left', cursor: 'pointer',
-                    background: PAPER,
-                    border: isPinned ? `2px solid ${pinColor}` : '1px solid rgba(27,42,78,.16)',
-                    padding: '12px 13px 10px',
-                    display: 'flex', flexDirection: 'column', gap: 7,
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
-                      <span style={{
-                        fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-                        fontSize: 13, fontWeight: 800, color: INK, letterSpacing: '.02em',
-                      }}>{r.code}</span>
-                      <span style={{
-                        fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-                        fontSize: 11, fontWeight: 700, color: changeColorFor(r.change),
-                      }}>{r.change == null ? '—' : (r.change >= 0 ? '+' : '−') + Math.abs(r.change).toFixed(1) + '%'}</span>
-                    </div>
-                    <Sparkline data={spark} color={pinColor} />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
-                      <span style={{
-                        fontFamily: 'Publico, Georgia, serif', fontSize: 15, fontWeight: 600, color: INK,
-                      }}>{r.latest == null ? '—' : fmtVal(r.latest, metric.units)}</span>
-                      <span style={{ fontSize: 9.5, color: SOFT, textTransform: 'uppercase', letterSpacing: '.05em',
-                        fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif', fontWeight: 600,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+            <USMap metric={metric} rows={rows}
+                   anchorPhrase={anchorById(anchorId).phrase} mapMode={mapMode} />
+
             <div style={{
               marginTop: 14, fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic',
               fontSize: 12.5, color: MUTE,
             }}>
-              % change is measured {anchorById(anchorId).phrase}.
+              % change is measured {anchorById(anchorId).phrase}. Ranks are on the latest value (1 = highest — direction-neutral: highest rent is bad, highest income is good).
               {metric.id === 'rent' && ' State rents aggregate Zillow county data with renter-household weights; states where coverage falls below half of renter households are omitted.'}
             </div>
           </React.Fragment>
@@ -1822,16 +2223,27 @@ function AppMain({ data }) {
   const hash = useMemo(parseHash, []);
   const realBaseYear = data.cpi_all_items && data.cpi_all_items.data.length
     ? data.cpi_all_items.data[data.cpi_all_items.data.length - 1].date.slice(0, 4) : '';
-  const validState = (c) => idx && idx.states.some(s => s.code === c);
+  const validState = (c) => c === 'US' || (idx && idx.states.some(s => s.code === c));
   const validMetric = (m) => idx && idx.metrics.some(x => x.id === m);
 
   const [view, setView] = useState(
-    ['national', 'state', 'compare'].includes(hash.view) && (hash.view === 'national' || idx) ? hash.view : 'national');
+    ['national', 'state', 'compare', 'map'].includes(hash.view) && (hash.view === 'national' || idx) ? hash.view : 'national');
   const [anchorId, setAnchorId] = useState(ANCHORS.some(a => a.id === hash.anchor) ? hash.anchor : '2019');
   const [displayMode, setDisplayMode] = useState(hash.mode === 'pct' ? 'pct' : 'level');
   const [priceType, setPriceType] = useState(hash.type === 'real' ? 'real' : 'nominal');
   const [stateCode, setStateCode] = useState(validState(hash.state) ? hash.state : 'CA');
-  const [metricId, setMetricId] = useState(validMetric(hash.metric) ? hash.metric : (idx && idx.metrics[0] ? idx.metrics[0].id : 'unemployment'));
+  // Compare view supports up to four metrics (comma-separated in the hash).
+  const [metricIds, setMetricIds] = useState(() => {
+    const fromHash = (hash.metric || '').split(',').filter(validMetric).slice(0, 4);
+    if (fromHash.length) return fromHash;
+    return [idx && idx.metrics[0] ? idx.metrics[0].id : 'unemployment'];
+  });
+  // The Map view shows exactly one metric at a time.
+  const [mapMetricId, setMapMetricId] = useState(() => {
+    const first = (hash.metric || '').split(',')[0];
+    if (hash.view === 'map' && validMetric(first)) return first;
+    return idx && idx.metrics[0] ? idx.metrics[0].id : 'unemployment';
+  });
 
   // Deep links: a campaigner can send a colleague straight to their state.
   useEffect(() => {
@@ -1839,9 +2251,10 @@ function AppMain({ data }) {
     if (displayMode === 'pct') parts.push('mode=pct');
     if (priceType === 'real') parts.push('type=real');
     if (view === 'state') parts.push(`state=${stateCode}`);
-    if (view === 'compare') { parts.push(`metric=${metricId}`); }
+    if (view === 'compare') { parts.push(`metric=${metricIds.join(',')}`); }
+    if (view === 'map') { parts.push(`metric=${mapMetricId}`); }
     window.history.replaceState(null, '', '#' + parts.join('&'));
-  }, [view, anchorId, displayMode, priceType, stateCode, metricId]);
+  }, [view, anchorId, displayMode, priceType, stateCode, metricIds, mapMetricId]);
 
   const lastUpdated = (() => {
     const stamps = Object.values(data).map(d => d.last_updated).filter(Boolean).sort();
@@ -1853,6 +2266,7 @@ function AppMain({ data }) {
     ...(idx ? [
       { id: 'state',   label: 'My State' },
       { id: 'compare', label: 'Compare States' },
+      { id: 'map',     label: 'Map' },
     ] : []),
   ];
 
@@ -1938,8 +2352,10 @@ function AppMain({ data }) {
       {view === 'national' && <NationalView data={data} anchorId={anchorId} displayMode={displayMode} priceType={priceType} />}
       {view === 'state'    && <StateView data={data} code={stateCode} setCode={setStateCode}
                                          anchorId={anchorId} displayMode={displayMode} priceType={priceType} />}
-      {view === 'compare'  && <CompareView data={data} metricId={metricId} setMetricId={setMetricId}
+      {view === 'compare'  && <CompareView data={data} metricIds={metricIds} setMetricIds={setMetricIds}
                                            homeState={stateCode} anchorId={anchorId} displayMode={displayMode} priceType={priceType} />}
+      {view === 'map'      && <MapView data={data} metricId={mapMetricId} setMetricId={setMapMetricId}
+                                       anchorId={anchorId} priceType={priceType} />}
 
       {/* Footer */}
       <div className="at-pad" style={{ padding: '0 56px 48px' }}>
@@ -1954,7 +2370,7 @@ function AppMain({ data }) {
             About the data: sources & methods
           </a>
           <span style={{ textAlign: 'right' }}>
-            Data: FRED · BLS · Census · FHFA · Zillow · Freddie Mac · EIA<br/>
+            Data: FRED · BLS · Census · FHFA · Zillow · Freddie Mac · EIA · NY Fed · KFF · Urban · CCAoA<br/>
             economicsecurityproject.org / affordability
           </span>
         </div>

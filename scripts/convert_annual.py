@@ -16,6 +16,13 @@ Note: KFF ACA premiums and the uninsured rate are handled separately, as full
 time series, by scripts/fetch_kff.py (they feed national + state metrics, not
 the single-value annual tiles here).
 
+This script also writes the NY Fed *time series* CSVs into data/nyfed/
+(long format: date,code,value — same shape as data/kff/). The NY Fed area
+report carries every Q4 back to 2003 plus an allUS row, so household debt
+per capita, student-loan debt per capita, and 90+ day credit-card
+delinquency feed full annual national cards + state metrics (source =
+"nyfed" in fetch_data.R), not single-value tiles.
+
 Run from the repo root:  python3 scripts/convert_annual.py
 """
 
@@ -99,42 +106,72 @@ def convert_ccaoa():
 
 
 def convert_nyfed():
+    """Write NY Fed annual time series (all Q4s, 2003–present) to data/nyfed/.
+
+    Long format matching data/kff/: date,code,value. Q4 observations are
+    dated YYYY-12-01 so the tracker's Dec-2019 pre-pandemic anchor lands
+    exactly on the Q4 2019 point. The sheet's 'allUS' row becomes code US,
+    giving the state metrics a national overlay from the same credit panel
+    (source consistency — no mixing of NY Fed states with G.19 national).
+    """
     try:
         import openpyxl
     except ImportError:
         sys.exit("openpyxl required: pip install openpyxl")
     wb = openpyxl.load_workbook(os.path.join(RAW, "area_report_by_year.xlsx"), read_only=True)
 
-    def sheet_latest(sheet_name):
+    def sheet_series(sheet_name):
+        """-> (rows, latest_label): rows = [(date, code, value)] for all Q4s."""
         ws = wb[sheet_name]
         grid = [[c for c in row] for row in ws.iter_rows(values_only=True)]
         # Find the header row ("state", "Q4_2003", ...)
         hdr_i = next(i for i, row in enumerate(grid)
                      if row and str(row[0]).strip().lower() == "state")
         header = [str(c).strip() if c is not None else "" for c in grid[hdr_i]]
-        q_cols = [j for j, h in enumerate(header) if h.startswith("Q4_")]
-        latest_j = max(q_cols, key=lambda j: header[j])
-        latest_label = header[latest_j]
+        q_cols = [(j, h) for j, h in enumerate(header) if h.startswith("Q4_")]
         rows = []
         for row in grid[hdr_i + 1:]:
             if not row or row[0] is None:
                 continue
-            code = str(row[0]).strip().upper()
-            val = row[latest_j]
-            if code in VALID and val is not None:
-                rows.append((code, val))
-        return rows, latest_label
+            code = str(row[0]).strip()
+            code = "US" if code == "allUS" else code.upper()
+            if code != "US" and code not in VALID:
+                continue
+            for j, h in q_cols:
+                if row[j] is None:
+                    continue
+                rows.append((f"{h[3:]}-12-01", code, float(row[j])))
+        return rows, max(h for _, h in q_cols)
 
-    total, label_t = sheet_latest("total")
-    write_out("nyfed_total_debt.csv", [(s, int(round(float(v)))) for s, v in total])
+    out_dir = os.path.join("data", "nyfed")
+    os.makedirs(out_dir, exist_ok=True)
 
-    cc, label_c = sheet_latest("creditcard_delinq")
-    # Sheet values are percent of balance 90+ days delinquent. Guard against
-    # a fraction-vs-percent format change between releases.
-    sample = [float(v) for _, v in cc[:10]]
-    scale = 100 if max(sample) < 1 else 1
-    write_out("nyfed_cc_delinquency.csv", [(s, round(float(v) * scale, 1)) for s, v in cc])
-    print(f"  NY Fed vintage: {label_t} / {label_c}")
+    def write_series(name, rows, fmt):
+        path = os.path.join(out_dir, name)
+        with open(path, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["date", "code", "value"])
+            for date, code, v in sorted(rows, key=lambda r: (r[1], r[0])):
+                w.writerow([date, code, fmt(v)])
+        n_codes = len({c for _, c, _ in rows})
+        n_years = len({d for d, _, _ in rows})
+        print(f"  nyfed/{name}: {n_codes} geographies x {n_years} years")
+
+    for sheet, name, is_dollar in [
+        ("total",             "debt_per_capita.csv",        True),
+        ("studentloan",       "studentloan_per_capita.csv", True),
+        ("creditcard_delinq", "cc_delinquency_90.csv",      False),
+    ]:
+        rows, label = sheet_series(sheet)
+        if is_dollar:
+            write_series(name, rows, lambda v: int(round(v)))
+        else:
+            # Percent of balance 90+ days delinquent. Guard against a
+            # fraction-vs-percent format change between releases.
+            sample = [v for _, _, v in rows[:40]]
+            scale = 100 if max(sample) < 1 else 1
+            write_series(name, rows, lambda v: round(v * scale, 1))
+    print(f"  NY Fed vintage: {label}")
 
 
 if __name__ == "__main__":

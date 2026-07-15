@@ -190,15 +190,16 @@ fetch_bls <- function(bls_id, from = "2000-01-01") {
 SERIES <- list(
   # ── Daily Items (teal family) ──
   list(
-    id          = "groceries",
-    fred_id     = "CPIFABSL",
-    label       = "Groceries",
-    subtitle    = "Food at Home CPI",
+    id          = "water_sewer_trash",
+    fred_id     = "CUSR0000SEHG",
+    label       = "Water & Sewer",
+    subtitle    = "Water, Sewer & Trash Collection CPI",
     category    = "daily",
     units       = "Index (1982–84 = 100)",
-    description = "CPI for all urban consumers: food at home. Tracks how much grocery prices have risen relative to a 1982–84 baseline.",
-    color       = "#0F766E",
-    from        = "2000-01-01"
+    description = "CPI for water, sewer, and trash collection services, all urban consumers, seasonally adjusted. No state-level water-rate data exists from a public source (the AWWA rate survey is proprietary), so this national index is the defensible measure.",
+    color       = "#0891B2",
+    from        = "2000-01-01",
+    is_new      = TRUE
   ),
   list(
     id          = "gas",
@@ -223,6 +224,19 @@ SERIES <- list(
     from        = "2000-01-01"
   ),
   # ── Groceries (amber/orange family) ──
+  # The all-groceries CPI lives here with the individual items it aggregates
+  # (moved out of Daily Items — comms feedback).
+  list(
+    id          = "groceries",
+    fred_id     = "CPIFABSL",
+    label       = "Groceries",
+    subtitle    = "Food at Home CPI (All Groceries)",
+    category    = "groceries",
+    units       = "Index (1982–84 = 100)",
+    description = "CPI for all urban consumers: food at home. The aggregate index the individual grocery items below feed into.",
+    color       = "#A16207",
+    from        = "2000-01-01"
+  ),
   list(
     id          = "eggs",
     fred_id     = "APU0000708111",
@@ -448,6 +462,24 @@ SERIES <- list(
     is_new      = TRUE,
     source_note = "KFF State Health Facts, Health Insurance Coverage of the Total Population (annual)"
   ),
+  # ── Housing burden (Census ACS, violet family) ──
+  # Annual, from data/census/*.csv (scripts/fetch_census.py). Optional until
+  # the first fetch_census.py run — skipped loudly, not a failure, if absent.
+  list(
+    id          = "rent_burden",
+    source      = "census",
+    src_id      = "rent_burden",
+    label       = "Rent Burden",
+    subtitle    = "Renters Paying 30%+ of Income",
+    category    = "big",
+    units       = "% of Renters",
+    description = "Share of renter households spending 30 percent or more of household income on gross rent — the standard cost-burden threshold. Census ACS 1-year estimates, table B25070 (households where the ratio is not computed are excluded). No 2020 data (no standard ACS release).",
+    color       = "#8B5CF6",
+    from        = "2005-01-01",
+    is_new      = TRUE,
+    optional    = TRUE,
+    source_note = "Census ACS 1-year, table B25070 (annual)"
+  ),
   # ── Labor Market (green family) ──
   list(
     id          = "unemployment",
@@ -517,6 +549,44 @@ SERIES <- list(
     description = "Average number of weeks an unemployed person has been seeking work, monthly, seasonally adjusted.",
     color       = "#22C55E",
     from        = "2000-01-01"
+  ),
+  # Income distribution: the ACS publishes quintile upper limits (B19080),
+  # so the 20th and 80th percentiles are the exact published points closest
+  # to the requested 25th/75th — interpolating those would add assumptions
+  # that wouldn't survive a hostile fact-check. Nominal dollars (the Real
+  # toggle deflates them); the median income series stays CPI-U-RS-adjusted
+  # as published.
+  list(
+    id          = "income_20th",
+    source      = "census",
+    src_id      = "income_20th",
+    label       = "Income: 20th Percentile",
+    subtitle    = "Household Income, Lowest-Quintile Upper Limit",
+    category    = "labor",
+    units       = "$",
+    description = "The household income level that 20 percent of households fall below — the upper limit of the lowest quintile. Census ACS 1-year estimates, table B19080. Nominal dollars; use the Real toggle for inflation-adjusted values. No 2020 data.",
+    color       = "#4D7C0F",
+    from        = "2005-01-01",
+    is_new      = TRUE,
+    optional    = TRUE,
+    invert_color = TRUE,
+    source_note = "Census ACS 1-year, table B19080 (annual)"
+  ),
+  list(
+    id          = "income_80th",
+    source      = "census",
+    src_id      = "income_80th",
+    label       = "Income: 80th Percentile",
+    subtitle    = "Household Income, Fourth-Quintile Upper Limit",
+    category    = "labor",
+    units       = "$",
+    description = "The household income level that 80 percent of households fall below — the upper limit of the fourth quintile. Census ACS 1-year estimates, table B19080. Nominal dollars; use the Real toggle for inflation-adjusted values. No 2020 data.",
+    color       = "#65A30D",
+    from        = "2005-01-01",
+    is_new      = TRUE,
+    optional    = TRUE,
+    invert_color = TRUE,
+    source_note = "Census ACS 1-year, table B19080 (annual)"
   ),
   list(
     id          = "cpi_all_items",
@@ -603,6 +673,55 @@ SERIES <- list(
     description = "Share of single-family residential mortgage balances 30+ days delinquent at all commercial banks. Quarterly, seasonally adjusted.",
     color       = "#7F1D1D",
     from        = "2000-01-01"
+  ),
+  # NY Fed Consumer Credit Panel per-capita series (annual Q4, from
+  # data/nyfed/*.csv via scripts/convert_annual.py). Same panel covers the
+  # US and every state, so the state metrics get a source-consistent
+  # national overlay — no mixing NY Fed states with G.19 national.
+  list(
+    id          = "debt_per_capita",
+    source      = "nyfed",
+    src_id      = "debt_per_capita",
+    label       = "Household Debt per Capita",
+    subtitle    = "All Debt per Person with a Credit File",
+    category    = "debt",
+    units       = "$ per Person",
+    description = "Total household debt (mortgage, auto, credit card, student loan, other) per person with a credit file. NY Fed Consumer Credit Panel / Equifax, State-Level Household Debt Statistics — annual, each point is Q4.",
+    color       = "#9F1239",
+    from        = "2003-12-01",
+    is_new      = TRUE,
+    source_note = "NY Fed Consumer Credit Panel / Equifax (annual, Q4)"
+  ),
+  # Overlay-only NY Fed lines: the national cards for these concepts already
+  # exist from G.19/commercial-bank data; these exist so the state charts
+  # compare against the same NY Fed panel.
+  list(
+    id           = "studentloan_per_capita",
+    source       = "nyfed",
+    src_id       = "studentloan_per_capita",
+    label        = "Student Loan Debt per Capita",
+    subtitle     = "Per Person with a Credit File, US",
+    category     = "debt",
+    units        = "$ per Person",
+    description  = "Student loan debt per person with a credit file, US. NY Fed Consumer Credit Panel / Equifax — annual, each point is Q4. National comparison line for the state metric.",
+    color        = "#991B1B",
+    from         = "2003-12-01",
+    overlay_only = TRUE,
+    source_note  = "NY Fed Consumer Credit Panel / Equifax (annual, Q4)"
+  ),
+  list(
+    id           = "cc_delinquency_90",
+    source       = "nyfed",
+    src_id       = "cc_delinquency_90",
+    label        = "Credit Card Delinquency (90+)",
+    subtitle     = "Share of Balance 90+ Days Late, US",
+    category     = "debt",
+    units        = "% of Balance",
+    description  = "Share of credit card balances 90 or more days delinquent, US. NY Fed Consumer Credit Panel / Equifax — annual, each point is Q4. National comparison line for the state metric.",
+    color        = "#B91C1C",
+    from         = "2003-12-01",
+    overlay_only = TRUE,
+    source_note  = "NY Fed Consumer Credit Panel / Equifax (annual, Q4)"
   ),
   # ── National overlays for state charts (not rendered as cards) ──
   list(
@@ -744,6 +863,22 @@ STATE_METRICS <- list(
     from         = "2015-01-01",
     round_digits = 0
   ),
+  # Derived: market rent ÷ state average hourly wage. Computed in the metric
+  # loop from the two metrics above it (order matters). The comms "stopwatch"
+  # measure, made rigorous: how many hours of work a month's rent costs.
+  list(
+    id           = "rent_hours",
+    label        = "Rent in Hours of Work",
+    units        = "Hours of Work",
+    color        = "#15803D",
+    national_id  = "rent_hours",
+    frequency    = "Monthly",
+    source_label = "Derived: Zillow ZORI ÷ BLS state hourly earnings",
+    description  = "How many hours of work at the state's average private-sector hourly wage it takes to pay one month's market-rate rent. Derived from Zillow ZORI (renter-weighted county aggregation) and BLS state CES average hourly earnings.",
+    source       = "derived_rent_hours",
+    from         = "2015-01-01",
+    round_digits = 1
+  ),
   list(
     id           = "electricity_bill",
     label        = "Electricity Bill",
@@ -783,6 +918,94 @@ STATE_METRICS <- list(
     source       = "kff",
     kff_id       = "uninsured_rate",
     from         = "2008-01-01",
+    round_digits = 1
+  ),
+  # ── NY Fed Consumer Credit Panel (annual Q4, data/nyfed/) ──
+  list(
+    id           = "debt_per_capita",
+    label        = "Household Debt per Capita",
+    units        = "$ per Person",
+    color        = "#9F1239",
+    national_id  = "debt_per_capita",
+    frequency    = "Annual (Q4)",
+    source_label = "NY Fed Consumer Credit Panel / Equifax",
+    description  = "Total household debt (mortgage, auto, credit card, student loan, other) per person with a credit file. NY Fed State-Level Household Debt Statistics; each point is Q4.",
+    source       = "nyfed",
+    src_id       = "debt_per_capita",
+    from         = "2003-12-01",
+    round_digits = 0
+  ),
+  list(
+    id           = "studentloan_per_capita",
+    label        = "Student Loan Debt per Capita",
+    units        = "$ per Person",
+    color        = "#991B1B",
+    national_id  = "studentloan_per_capita",
+    frequency    = "Annual (Q4)",
+    source_label = "NY Fed Consumer Credit Panel / Equifax",
+    description  = "Student loan debt per person with a credit file. NY Fed State-Level Household Debt Statistics; each point is Q4.",
+    source       = "nyfed",
+    src_id       = "studentloan_per_capita",
+    from         = "2003-12-01",
+    round_digits = 0
+  ),
+  list(
+    id           = "cc_delinquency_90",
+    label        = "Credit Card Delinquency (90+)",
+    units        = "% of Balance",
+    color        = "#B91C1C",
+    national_id  = "cc_delinquency_90",
+    frequency    = "Annual (Q4)",
+    source_label = "NY Fed Consumer Credit Panel / Equifax",
+    description  = "Share of credit card balances 90 or more days delinquent. NY Fed State-Level Household Debt Statistics; each point is Q4.",
+    source       = "nyfed",
+    src_id       = "cc_delinquency_90",
+    from         = "2003-12-01",
+    round_digits = 1
+  ),
+  # ── Census ACS annual series (data/census/, scripts/fetch_census.py) ──
+  list(
+    id           = "income_20th",
+    label        = "Income: 20th Percentile",
+    units        = "$",
+    color        = "#4D7C0F",
+    national_id  = "income_20th",
+    frequency    = "Annual",
+    source_label = "Census ACS 1-year, table B19080",
+    description  = "The household income level that 20 percent of the state's households fall below (lowest-quintile upper limit). Nominal dollars; the Real toggle deflates by national CPI-U. No 2020 data.",
+    source       = "census",
+    src_id       = "income_20th",
+    from         = "2005-01-01",
+    invert_color = TRUE,
+    round_digits = 0
+  ),
+  list(
+    id           = "income_80th",
+    label        = "Income: 80th Percentile",
+    units        = "$",
+    color        = "#65A30D",
+    national_id  = "income_80th",
+    frequency    = "Annual",
+    source_label = "Census ACS 1-year, table B19080",
+    description  = "The household income level that 80 percent of the state's households fall below (fourth-quintile upper limit). Nominal dollars; the Real toggle deflates by national CPI-U. No 2020 data.",
+    source       = "census",
+    src_id       = "income_80th",
+    from         = "2005-01-01",
+    invert_color = TRUE,
+    round_digits = 0
+  ),
+  list(
+    id           = "rent_burden",
+    label        = "Rent Burden",
+    units        = "% of Renters",
+    color        = "#8B5CF6",
+    national_id  = "rent_burden",
+    frequency    = "Annual",
+    source_label = "Census ACS 1-year, table B25070",
+    description  = "Share of renter households paying 30 percent or more of household income on gross rent — the standard cost-burden threshold. Households where the ratio is not computed are excluded. No 2020 data.",
+    source       = "census",
+    src_id       = "rent_burden",
+    from         = "2005-01-01",
     round_digits = 1
   )
 )
@@ -996,24 +1219,25 @@ read_annual_layers <- function() {
   list(meta = kept, values = values)
 }
 
-# ── KFF annual time series ────────────────────────────────────────────────────
-# Multi-year, state-level indicators pulled from KFF State Health Facts by the
-# companion script scripts/fetch_kff.py (run yearly). Unlike the single-value
+# ── Annual long-CSV time series (KFF, NY Fed, Census) ─────────────────────────
+# Multi-year, state-level indicators produced by the companion scripts (run
+# yearly): scripts/fetch_kff.py → data/kff/, scripts/convert_annual.py →
+# data/nyfed/, scripts/fetch_census.py → data/census/. Unlike the single-value
 # annual layers above, these are full time series (one point per year) and feed
-# both a national card and a state metric. Each file under data/kff/ is a long
-# CSV with columns date,code,value (code = "US" or 2-letter postal). Returns a
-# named list: kff[[id]][[code]] = data.frame(date, value) sorted by date.
+# both a national card and a state metric. Each file is a long CSV with columns
+# date,code,value (code = "US" or 2-letter postal). Returns a named list:
+# out[[id]][[code]] = data.frame(date, value) sorted by date.
 # Committed artifacts — this reads them; it does not hit the network. If a file
-# is absent the series simply won't build (and fails loudly downstream).
-read_kff <- function() {
-  dir <- file.path("data", "kff")
+# is absent the series simply won't build (and fails loudly downstream, unless
+# the SERIES entry is marked optional).
+read_long_dir <- function(dir) {
   if (!dir.exists(dir)) return(list())
   out <- list()
   for (f in list.files(dir, pattern = "\\.csv$", full.names = TRUE)) {
     id <- sub("\\.csv$", "", basename(f))
     df <- tryCatch(read.csv(f, stringsAsFactors = FALSE), error = function(e) NULL)
     if (is.null(df) || !all(c("date", "code", "value") %in% names(df))) {
-      cat(sprintf("  KFF file %s: needs date,code,value columns, skipping\n", basename(f)))
+      cat(sprintf("  %s: needs date,code,value columns, skipping\n", f))
       next
     }
     df <- df[!is.na(df$value), ]
@@ -1055,12 +1279,18 @@ zori <- tryCatch(fetch_zori(), error = function(e) {
 })
 if (!is.null(zori)) cat(sprintf(" ✓  (%d states + US)\n", length(zori) - 1))
 
-# KFF annual series (data/kff/*.csv), produced yearly by scripts/fetch_kff.py.
-# Read once and reused for the national cards and every state metric below.
-cat("Reading KFF annual series (data/kff/) ...")
-kff <- read_kff()
-cat(sprintf(" ✓  (%s)\n",
-            if (length(kff)) paste(names(kff), collapse = ", ") else "none found"))
+# Annual long-CSV series, produced yearly by the companion scripts. Read once
+# and reused for the national cards and every state metric below.
+LONG_SOURCES <- list()
+for (src in c("kff", "nyfed", "census")) {
+  cat(sprintf("Reading %s annual series (data/%s/) ...", src, src))
+  LONG_SOURCES[[src]] <- read_long_dir(file.path("data", src))
+  cat(sprintf(" ✓  (%s)\n",
+              if (length(LONG_SOURCES[[src]]))
+                paste(names(LONG_SOURCES[[src]]), collapse = ", ")
+              else "none found"))
+}
+kff <- LONG_SOURCES$kff
 
 all_data <- list()
 
@@ -1074,10 +1304,12 @@ for (cfg in SERIES) {
     } else if (!is.null(cfg$source) && cfg$source == "zori") {
       if (is.null(zori)) stop("ZORI fetch failed upstream")
       zori[["US"]]$data
-    } else if (!is.null(cfg$source) && cfg$source == "kff") {
-      ks <- kff[[cfg$kff_id]]
+    } else if (!is.null(cfg$source) && cfg$source %in% names(LONG_SOURCES)) {
+      key <- cfg$src_id %||% cfg$kff_id
+      ks <- LONG_SOURCES[[cfg$source]][[key]]
       if (is.null(ks) || is.null(ks[["US"]]))
-        stop("KFF series missing — run scripts/fetch_kff.py: ", cfg$kff_id)
+        stop(cfg$source, " series missing — regenerate data/", cfg$source,
+             "/ (see scripts/): ", key)
       d <- ks[["US"]]
       d[d$date >= cfg$from, ]
     } else {
@@ -1176,6 +1408,46 @@ if (!is.null(all_data$hourly_earnings) && !is.null(all_data$cpi_all_items)) {
   cat(sprintf("\nDerived real_hourly_earnings ✓  (%.2f on %s)\n", latest_val, latest_date))
 }
 
+# ── Derived series: rent in hours of work ──────────────────────────────────────
+# Market rent (ZORI, $/month) divided by average hourly earnings — how many
+# hours at the average private-sector wage a month's rent costs. The national
+# counterpart of the state rent_hours metric (comms "stopwatch" measure).
+if (!is.null(all_data$zori_rent) && !is.null(all_data$hourly_earnings)) {
+  rh <- merge(all_data$zori_rent$data, all_data$hourly_earnings$data,
+              by = "date", suffixes = c("_rent", "_wage"))
+  rh <- rh[order(rh$date), ]
+  rh <- rh[is.finite(rh$value_rent) & is.finite(rh$value_wage) & rh$value_wage > 0, ]
+  rh_df <- data.frame(date = rh$date, value = round(rh$value_rent / rh$value_wage, 1))
+
+  write.csv(rh_df, file.path("data", "rent_hours.csv"), row.names = FALSE)
+
+  latest_val  <- tail(rh_df$value, 1)
+  latest_date <- tail(rh_df$date,  1)
+  change      <- yoy_pct(rh_df)
+
+  all_data$rent_hours <- list(
+    id           = "rent_hours",
+    label        = "Rent in Hours of Work",
+    subtitle     = "Hours at the Average Wage per Month's Rent",
+    category     = "labor",
+    units        = "Hours of Work",
+    description  = "How many hours of work at the average private-sector hourly wage it takes to pay one month's market-rate rent (Zillow ZORI ÷ BLS average hourly earnings). Rising hours mean rent is outpacing pay.",
+    color        = "#15803D",
+    source_note  = "Derived: Zillow ZORI ÷ BLS CES0500000003",
+    is_new       = TRUE,
+    invert_color = FALSE,
+    overlay_only = FALSE,
+    rebase       = FALSE,
+    last_updated = format(Sys.Date(), "%Y-%m-%d"),
+    latest_value = round(latest_val, 3),
+    latest_date  = latest_date,
+    yoy_change   = if (!is.na(change)) change else NULL,
+    n_obs        = nrow(rh_df),
+    data         = rh_df
+  )
+  cat(sprintf("Derived rent_hours ✓  (%.1f hrs on %s)\n", latest_val, latest_date))
+}
+
 # ── State download loop ───────────────────────────────────────────────────────
 # ~200 FRED requests; a short sleep keeps us polite to the public endpoint.
 cat("\n── State series ─────────────────────────────\n")
@@ -1218,11 +1490,15 @@ for (metric in STATE_METRICS) {
     next
   }
 
-  if (!is.null(metric$source) && metric$source == "kff") {
-    ks <- kff[[metric$kff_id]]
+  if (!is.null(metric$source) && metric$source %in% names(LONG_SOURCES)) {
+    key <- metric$src_id %||% metric$kff_id
+    ks <- LONG_SOURCES[[metric$source]][[key]]
     if (is.null(ks)) {
-      cat("  ✗ KFF data missing — run scripts/fetch_kff.py; skipping\n")
-      failures <- c(failures, paste0("state_", metric$id))
+      cat(sprintf("  ✗ %s data missing — regenerate data/%s/ (see scripts/); skipping\n",
+                  metric$source, metric$source))
+      # Census series are optional until the first fetch_census.py run;
+      # missing KFF or NY Fed inputs are committed artifacts and fail loudly.
+      if (metric$source != "census") failures <- c(failures, paste0("state_", metric$id))
       next
     }
     n_ok <- 0
@@ -1234,7 +1510,31 @@ for (metric in STATE_METRICS) {
       state_results[[s$code]][[metric$id]] <- list(data = d)
       n_ok <- n_ok + 1
     }
-    cat(sprintf("  ✓ %d states from KFF\n", n_ok))
+    cat(sprintf("  ✓ %d states from %s\n", n_ok, metric$source))
+    next
+  }
+
+  # Derived: rent ÷ hourly wage. Depends on the rent and wages metrics being
+  # processed earlier in STATE_METRICS (they are — order matters here).
+  if (!is.null(metric$source) && metric$source == "derived_rent_hours") {
+    n_ok <- 0
+    for (s in STATES) {
+      r <- state_results[[s$code]][["rent"]]
+      w <- state_results[[s$code]][["wages"]]
+      if (is.null(r) || is.null(w)) next
+      m <- merge(r$data, w$data, by = "date", suffixes = c("_rent", "_wage"))
+      m <- m[order(m$date), ]
+      m <- m[is.finite(m$value_rent) & is.finite(m$value_wage) & m$value_wage > 0, ]
+      if (nrow(m) < 12) next
+      df <- data.frame(
+        date  = m$date,
+        value = round(m$value_rent / m$value_wage, metric$round_digits),
+        stringsAsFactors = FALSE
+      )
+      state_results[[s$code]][[metric$id]] <- list(data = df)
+      n_ok <- n_ok + 1
+    }
+    cat(sprintf("  ✓ %d states derived (rent ÷ wages)\n", n_ok))
     next
   }
 
@@ -1265,17 +1565,44 @@ for (metric in STATE_METRICS) {
 cat("\n── Annual layers ───────────────────────────\n")
 annual <- read_annual_layers()
 
+# ── Build-time rankings ───────────────────────────────────────────────────────
+# For every state metric: each state's rank on the latest value, 1 = highest.
+# Baked into both payload shapes so "Nth highest of 51" needs no client-side
+# cross-state loads (the My State view only has its own state's data).
+# The front end phrases direction ("highest") itself; invert_color already
+# says whether high is good.
+metric_ranks <- list()
+for (metric in STATE_METRICS) {
+  codes <- character(0); vals <- numeric(0)
+  for (s in STATES) {
+    res <- state_results[[s$code]][[metric$id]]
+    if (is.null(res) || nrow(res$data) == 0) next
+    v <- tail(res$data$value, 1)
+    if (!is.finite(v)) next
+    codes <- c(codes, s$code); vals <- c(vals, v)
+  }
+  if (!length(codes)) next
+  rk <- rank(-vals, ties.method = "min")
+  metric_ranks[[metric$id]] <- list(
+    n    = length(codes),
+    rank = setNames(as.list(as.integer(rk)), codes)
+  )
+}
+
 # ── Assemble state payloads ───────────────────────────────────────────────────
 today <- format(Sys.Date(), "%Y-%m-%d")
 
-summarize_series <- function(res) {
+summarize_series <- function(res, metric_id = NULL, code = NULL) {
   df <- res$data
+  rinfo <- if (!is.null(metric_id)) metric_ranks[[metric_id]] else NULL
   compact(list(
     latest_value = tail(df$value, 1),
     latest_date  = tail(df$date, 1),
     yoy_change   = { c <- yoy_pct(df); if (!is.na(c)) c else NULL },
     fred_id      = res$fred_id %||% NULL,
     coverage     = res$coverage %||% NULL,
+    rank         = if (!is.null(rinfo) && !is.null(code)) rinfo$rank[[code]] else NULL,
+    rank_n       = if (!is.null(rinfo) && !is.null(code) && !is.null(rinfo$rank[[code]])) rinfo$n else NULL,
     n_obs        = nrow(df),
     data         = df
   ))
@@ -1291,7 +1618,11 @@ for (s in STATES) {
     code    = s$code,
     name    = s$name,
     updated = today,
-    metrics = lapply(metrics_here, summarize_series),
+    metrics = setNames(
+      lapply(names(metrics_here), function(mid)
+        summarize_series(metrics_here[[mid]], metric_id = mid, code = s$code)),
+      names(metrics_here)
+    ),
     annual  = {
       vals <- list()
       for (m in annual$meta) {
@@ -1316,7 +1647,7 @@ for (metric in STATE_METRICS) {
   for (s in STATES) {
     res <- state_results[[s$code]][[metric$id]]
     if (is.null(res)) next
-    per_state[[s$code]] <- summarize_series(res)
+    per_state[[s$code]] <- summarize_series(res, metric_id = metric$id, code = s$code)
   }
   if (length(per_state) == 0) next
 
@@ -1369,7 +1700,7 @@ metric_index <- Filter(function(m) m$n_states > 0, metric_index)
 states_index <- list(
   updated = today,
   states  = lapply(STATES, function(s) list(
-    code = s$code, name = s$name,
+    code = s$code, name = s$name, fips = s$fips,
     has  = names(state_results[[s$code]]) %||% character(0)
   )),
   metrics = metric_index,
@@ -1415,7 +1746,14 @@ cat(sprintf(
 # Action's commit step is skipped and the deployed site keeps serving its
 # last good data instead of a build silently missing a card. (EIA skipped
 # for lack of a key is not a failure; a broken Zillow feed is.)
-failed_national <- setdiff(vapply(SERIES, function(x) x$id, character(1)), names(all_data))
+# Entries marked optional (the Census series, until the first
+# scripts/fetch_census.py run) may be absent without failing the build.
+optional_ids <- vapply(Filter(function(x) isTRUE(x$optional), SERIES),
+                       function(x) x$id, character(1))
+failed_national <- setdiff(
+  setdiff(vapply(SERIES, function(x) x$id, character(1)), names(all_data)),
+  optional_ids
+)
 failures <- c(failures, failed_national)
 if (length(failures) > 0) {
   cat(sprintf("\n✗ %d fetches failed: %s\n", length(failures),
