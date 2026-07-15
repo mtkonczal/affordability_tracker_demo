@@ -407,7 +407,8 @@ SERIES <- list(
     description = "Typical market-rate asking rent (smoothed, seasonally adjusted), all homes and apartments. Zillow Observed Rent Index. Unlike CPI rent, this tracks what a new lease costs today, in dollars.",
     color       = "#7E22CE",
     from        = "2015-01-01",
-    is_new      = TRUE
+    is_new      = TRUE,
+    source_url  = "https://www.zillow.com/research/data/"
   ),
   list(
     id          = "median_home_price",
@@ -446,7 +447,8 @@ SERIES <- list(
     color       = "#9333EA",
     from        = "2018-01-01",
     is_new      = TRUE,
-    source_note = "KFF State Health Facts, Average Marketplace Premiums by Metal Tier (annual)"
+    source_note = "KFF State Health Facts, Average Marketplace Premiums by Metal Tier (annual)",
+    source_url  = "https://www.kff.org/affordable-care-act/state-indicator/average-marketplace-premiums-by-metal-tier/"
   ),
   list(
     id          = "uninsured_rate",
@@ -460,7 +462,8 @@ SERIES <- list(
     color       = "#A21CAF",
     from        = "2008-01-01",
     is_new      = TRUE,
-    source_note = "KFF State Health Facts, Health Insurance Coverage of the Total Population (annual)"
+    source_note = "KFF State Health Facts, Health Insurance Coverage of the Total Population (annual)",
+    source_url  = "https://www.kff.org/state-health-policy-data/state-indicator/total-population/"
   ),
   # ── Housing burden (Census ACS, violet family) ──
   # Annual, from data/census/*.csv (scripts/fetch_census.py). Optional until
@@ -478,7 +481,8 @@ SERIES <- list(
     from        = "2005-01-01",
     is_new      = TRUE,
     optional    = TRUE,
-    source_note = "Census ACS 1-year, table B25070 (annual)"
+    source_note = "Census ACS 1-year, table B25070 (annual)",
+    source_url  = "https://data.census.gov/table?q=B25070"
   ),
   # ── Labor Market (green family) ──
   list(
@@ -570,7 +574,8 @@ SERIES <- list(
     is_new      = TRUE,
     optional    = TRUE,
     invert_color = TRUE,
-    source_note = "Census ACS 1-year, table B19080 (annual)"
+    source_note = "Census ACS 1-year, table B19080 (annual)",
+    source_url  = "https://data.census.gov/table?q=B19080"
   ),
   list(
     id          = "income_80th",
@@ -586,7 +591,8 @@ SERIES <- list(
     is_new      = TRUE,
     optional    = TRUE,
     invert_color = TRUE,
-    source_note = "Census ACS 1-year, table B19080 (annual)"
+    source_note = "Census ACS 1-year, table B19080 (annual)",
+    source_url  = "https://data.census.gov/table?q=B19080"
   ),
   list(
     id          = "cpi_all_items",
@@ -690,7 +696,8 @@ SERIES <- list(
     color       = "#9F1239",
     from        = "2003-12-01",
     is_new      = TRUE,
-    source_note = "NY Fed Consumer Credit Panel / Equifax (annual, Q4)"
+    source_note = "NY Fed Consumer Credit Panel / Equifax (annual, Q4)",
+    source_url  = "https://www.newyorkfed.org/microeconomics/databank.html"
   ),
   # Overlay-only NY Fed lines: the national cards for these concepts already
   # exist from G.19/commercial-bank data; these exist so the state charts
@@ -707,7 +714,8 @@ SERIES <- list(
     color        = "#991B1B",
     from         = "2003-12-01",
     overlay_only = TRUE,
-    source_note  = "NY Fed Consumer Credit Panel / Equifax (annual, Q4)"
+    source_note  = "NY Fed Consumer Credit Panel / Equifax (annual, Q4)",
+    source_url   = "https://www.newyorkfed.org/microeconomics/databank.html"
   ),
   list(
     id           = "cc_delinquency_90",
@@ -721,7 +729,8 @@ SERIES <- list(
     color        = "#B91C1C",
     from         = "2003-12-01",
     overlay_only = TRUE,
-    source_note  = "NY Fed Consumer Credit Panel / Equifax (annual, Q4)"
+    source_note  = "NY Fed Consumer Credit Panel / Equifax (annual, Q4)",
+    source_url   = "https://www.newyorkfed.org/microeconomics/databank.html"
   ),
   # ── National overlays for state charts (not rendered as cards) ──
   list(
@@ -804,6 +813,7 @@ STATE_METRICS <- list(
     national_id  = "unemployment",
     frequency    = "Monthly",
     source_label = "BLS LAUS via FRED",
+    source_url   = "https://www.bls.gov/lau/",
     description  = "Unemployment rate, seasonally adjusted. BLS Local Area Unemployment Statistics.",
     fred_pattern = function(s) paste0(s$code, "UR"),
     from         = "2000-01-01",
@@ -817,6 +827,7 @@ STATE_METRICS <- list(
     national_id  = "hourly_earnings",
     frequency    = "Monthly",
     source_label = "BLS State CES via FRED",
+    source_url   = "https://www.bls.gov/sae/",
     description  = "Average hourly earnings of all private employees. BLS state Current Employment Statistics, not seasonally adjusted.",
     fred_pattern = function(s) paste0("SMU", s$fips, "000000500000003"),
     from         = "2007-01-01",
@@ -831,6 +842,7 @@ STATE_METRICS <- list(
     national_id  = "us_home_price_index",
     frequency    = "Quarterly",
     source_label = "FHFA via FRED",
+    source_url   = "https://www.fhfa.gov/data/hpi",
     description  = "FHFA All-Transactions House Price Index, quarterly, not seasonally adjusted.",
     fred_pattern = function(s) paste0(s$code, "STHPI"),
     from         = "2000-01-01",
@@ -844,6 +856,7 @@ STATE_METRICS <- list(
     national_id  = "us_median_income",
     frequency    = "Annual",
     source_label = "Census via FRED",
+    source_url   = "https://www.census.gov/topics/income-poverty/income.html",
     description  = "Real (CPI-U-RS-adjusted) median household income, annual, from the Census Bureau Current Population Survey.",
     fred_pattern = function(s) paste0("MEHOINUS", s$code, "A672N"),
     from         = "2000-01-01",
@@ -858,6 +871,7 @@ STATE_METRICS <- list(
     national_id  = "zori_rent",
     frequency    = "Monthly",
     source_label = "Zillow ZORI (county data, renter-weighted)",
+    source_url   = "https://www.zillow.com/research/data/",
     description  = "Typical market-rate asking rent. Zillow does not publish state ZORI, so this aggregates Zillow's county-level index using ACS renter-household weights; states where covered counties hold under half of renter households are omitted.",
     source       = "zori",
     from         = "2015-01-01",
@@ -874,6 +888,7 @@ STATE_METRICS <- list(
     national_id  = "rent_hours",
     frequency    = "Monthly",
     source_label = "Derived: Zillow ZORI ÷ BLS state hourly earnings",
+    source_url   = "about.html",
     description  = "How many hours of work at the state's average private-sector hourly wage it takes to pay one month's market-rate rent. Derived from Zillow ZORI (renter-weighted county aggregation) and BLS state CES average hourly earnings.",
     source       = "derived_rent_hours",
     from         = "2015-01-01",
@@ -887,6 +902,7 @@ STATE_METRICS <- list(
     national_id  = NULL,
     frequency    = "Monthly",
     source_label = "EIA-861M",
+    source_url   = "https://www.eia.gov/electricity/data/eia861m/",
     description  = "Average monthly residential electricity bill: total residential revenue divided by residential customer count, from EIA Form 861M. Recent months are preliminary and revised later.",
     source       = "eia",
     from         = "2008-01-01",
@@ -900,6 +916,7 @@ STATE_METRICS <- list(
     national_id  = "aca_benchmark_premium",
     frequency    = "Annual",
     source_label = "KFF State Health Facts",
+    source_url   = "https://www.kff.org/affordable-care-act/state-indicator/average-marketplace-premiums-by-metal-tier/",
     description  = "Average benchmark premium — the second-lowest-cost silver Marketplace plan for a 40-year-old, the plan ACA subsidies are pegged to. KFF analysis of Healthcare.gov and state rate filings.",
     source       = "kff",
     kff_id       = "aca_benchmark_premium",
@@ -914,6 +931,7 @@ STATE_METRICS <- list(
     national_id  = "uninsured_rate",
     frequency    = "Annual",
     source_label = "KFF State Health Facts",
+    source_url   = "https://www.kff.org/state-health-policy-data/state-indicator/total-population/",
     description  = "Share of the total population with no health insurance coverage. KFF Health Insurance Coverage of the Total Population. No 2020 data point (ACS did not release comparably).",
     source       = "kff",
     kff_id       = "uninsured_rate",
@@ -929,6 +947,7 @@ STATE_METRICS <- list(
     national_id  = "debt_per_capita",
     frequency    = "Annual (Q4)",
     source_label = "NY Fed Consumer Credit Panel / Equifax",
+    source_url   = "https://www.newyorkfed.org/microeconomics/databank.html",
     description  = "Total household debt (mortgage, auto, credit card, student loan, other) per person with a credit file. NY Fed State-Level Household Debt Statistics; each point is Q4.",
     source       = "nyfed",
     src_id       = "debt_per_capita",
@@ -943,6 +962,7 @@ STATE_METRICS <- list(
     national_id  = "studentloan_per_capita",
     frequency    = "Annual (Q4)",
     source_label = "NY Fed Consumer Credit Panel / Equifax",
+    source_url   = "https://www.newyorkfed.org/microeconomics/databank.html",
     description  = "Student loan debt per person with a credit file. NY Fed State-Level Household Debt Statistics; each point is Q4.",
     source       = "nyfed",
     src_id       = "studentloan_per_capita",
@@ -957,6 +977,7 @@ STATE_METRICS <- list(
     national_id  = "cc_delinquency_90",
     frequency    = "Annual (Q4)",
     source_label = "NY Fed Consumer Credit Panel / Equifax",
+    source_url   = "https://www.newyorkfed.org/microeconomics/databank.html",
     description  = "Share of credit card balances 90 or more days delinquent. NY Fed State-Level Household Debt Statistics; each point is Q4.",
     source       = "nyfed",
     src_id       = "cc_delinquency_90",
@@ -972,6 +993,7 @@ STATE_METRICS <- list(
     national_id  = "income_20th",
     frequency    = "Annual",
     source_label = "Census ACS 1-year, table B19080",
+    source_url   = "https://data.census.gov/table?q=B19080",
     description  = "The household income level that 20 percent of the state's households fall below (lowest-quintile upper limit). Nominal dollars; the Real toggle deflates by national CPI-U. No 2020 data.",
     source       = "census",
     src_id       = "income_20th",
@@ -987,6 +1009,7 @@ STATE_METRICS <- list(
     national_id  = "income_80th",
     frequency    = "Annual",
     source_label = "Census ACS 1-year, table B19080",
+    source_url   = "https://data.census.gov/table?q=B19080",
     description  = "The household income level that 80 percent of the state's households fall below (fourth-quintile upper limit). Nominal dollars; the Real toggle deflates by national CPI-U. No 2020 data.",
     source       = "census",
     src_id       = "income_80th",
@@ -1002,6 +1025,7 @@ STATE_METRICS <- list(
     national_id  = "rent_burden",
     frequency    = "Annual",
     source_label = "Census ACS 1-year, table B25070",
+    source_url   = "https://data.census.gov/table?q=B25070",
     description  = "Share of renter households paying 30 percent or more of household income on gross rent — the standard cost-burden threshold. Households where the ratio is not computed are excluded. No 2020 data.",
     source       = "census",
     src_id       = "rent_burden",
@@ -1334,7 +1358,7 @@ for (cfg in SERIES) {
     rebase_flag <- grepl("^Index", cfg$units)
 
     entry <- c(
-      compact(cfg[c("id", "label", "subtitle", "category", "units", "description", "color", "fred_id")]),
+      compact(cfg[c("id", "label", "subtitle", "category", "units", "description", "color", "fred_id", "source_url")]),
       compact(list(
         is_new       = isTRUE(cfg$is_new),
         invert_color = isTRUE(cfg$invert_color),
@@ -1394,6 +1418,7 @@ if (!is.null(all_data$hourly_earnings) && !is.null(all_data$cpi_all_items)) {
     description  = "Average hourly earnings of all private-sector employees, deflated by CPI-U (all items, seasonally adjusted) and expressed in the most recent month's dollars. Shows whether paychecks are keeping up with prices.",
     color        = "#059669",
     source_note  = "Derived: BLS CES0500000003 ÷ FRED CPIAUCSL",
+    source_url   = "https://fred.stlouisfed.org/series/CES0500000003",
     is_new       = FALSE,
     invert_color = TRUE,
     overlay_only = FALSE,
@@ -1434,6 +1459,7 @@ if (!is.null(all_data$zori_rent) && !is.null(all_data$hourly_earnings)) {
     description  = "How many hours of work at the average private-sector hourly wage it takes to pay one month's market-rate rent (Zillow ZORI ÷ BLS average hourly earnings). Rising hours mean rent is outpacing pay.",
     color        = "#15803D",
     source_note  = "Derived: Zillow ZORI ÷ BLS CES0500000003",
+    source_url   = "about.html",
     is_new       = TRUE,
     invert_color = FALSE,
     overlay_only = FALSE,
@@ -1689,6 +1715,7 @@ metric_index <- lapply(STATE_METRICS, function(m) {
     national_id  = m$national_id,
     frequency    = m$frequency,
     source_label = m$source_label,
+    source_url   = m$source_url,
     description  = m$description,
     invert_color = isTRUE(m$invert_color),
     rebase       = grepl("^Index", m$units),

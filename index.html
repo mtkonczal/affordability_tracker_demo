@@ -527,8 +527,11 @@ const FIPS_TO_POSTAL = {
   '54':'WV','55':'WI','56':'WY',
 };
 
-// Distinct colors assigned to pinned states in the compare view
-const PIN_COLORS = ['#E04E39', '#7C3AED', '#0D9488', '#B45309', '#DB2777', '#2563EB', '#059669', '#64748B'];
+// Distinct colors assigned to pinned states in the compare view. No hard cap
+// on how many states can be pinned — beyond 12 the colors cycle (tooltips and
+// chips still name every line).
+const PIN_COLORS = ['#E04E39', '#7C3AED', '#0D9488', '#B45309', '#DB2777', '#2563EB',
+                    '#059669', '#64748B', '#CA8A04', '#0E7490', '#BE123C', '#4D7C0F'];
 
 // Lazy-load Chart.js + date adapter once
 let chartJsPromise = null;
@@ -1044,20 +1047,31 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
         paddingTop: 8, borderTop: `1px solid rgba(27,42,78,.1)`,
         display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
       }}>
-        {item.fred_id ? (
-          <a
-            href={`https://fred.stlouisfed.org/series/${item.fred_id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: SOFT, textDecoration: 'none', borderBottom: '1px dotted rgba(27,42,78,.3)' }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = NAVY; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = SOFT; }}
-          >
-            Source · FRED · {item.fred_id} ↗
-          </a>
-        ) : (
-          <span>{item.source_note || 'Derived from public data'}</span>
-        )}
+        {(() => {
+          // Every card links back to a source document: the FRED series page
+          // when we have a FRED ID, otherwise the series' source_url (KFF,
+          // NY Fed, Zillow, Census, EIA — or about.html for derived series).
+          const srcUrl = item.fred_id
+            ? `https://fred.stlouisfed.org/series/${item.fred_id}`
+            : item.source_url;
+          const srcLabel = item.fred_id
+            ? `Source · FRED · ${item.fred_id}`
+            : `Source · ${item.source_note || 'View source'}`;
+          return srcUrl ? (
+            <a
+              href={srcUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: SOFT, textDecoration: 'none', borderBottom: '1px dotted rgba(27,42,78,.3)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = NAVY; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = SOFT; }}
+            >
+              {srcLabel} ↗
+            </a>
+          ) : (
+            <span>{item.source_note || 'Derived from public data'}</span>
+          );
+        })()}
         <span style={{ display: 'flex', gap: 8, alignItems: 'center' }} data-export-hide>
           <CopyFactButton item={item} factLabel={factLabel} priceType={priceType} cpiData={cpiData} rankText={rankText} />
           <button
@@ -1545,6 +1559,7 @@ function StateView({ data, code, setCode, anchorId, displayMode, priceType }) {
         color: m.color,
         fred_id: sm.fred_id,
         source_note: m.source_label,
+        source_url: m.source_url,
         rebase: m.rebase,
         invert_color: m.invert_color,
         already_real: ALREADY_REAL_IDS.has(m.id),
@@ -1784,27 +1799,62 @@ function USMap({ metric, rows, pinned = [], onPick, anchorPhrase, mapMode }) {
   const vals = rows.map(valOf).filter(v => v != null && isFinite(v));
   const NO_DATA = '#E9DFC8';
 
-  // Same diverging palette as the heatmap (beige→red / beige→green), so the
-  // views read as one family. `flip` handles metrics where rising is good.
-  const flip = metric.invert_color ? -1 : 1;
-  const maxAbs = Math.max(1, ...vals.map(v => Math.abs(v)));
-  const divergingColor = (v) => {
-    if (v == null || !isFinite(v)) return NO_DATA;
-    const clamp = Math.max(-maxAbs, Math.min(maxAbs, v * flip));
-    const a = Math.abs(clamp) / maxAbs;
-    const lerp = (s, e) => Math.round(s + (e - s) * a);
-    if (clamp > 0) return `rgb(${lerp(244, 224)},${lerp(236, 78)},${lerp(216, 57)})`;
-    return `rgb(${lerp(244, 46)},${lerp(236, 125)},${lerp(216, 91)})`;
-  };
-  const lvlMin = vals.length ? Math.min(...vals) : 0;
-  const lvlMax = vals.length ? Math.max(...vals) : 1;
+  // ── Color scales ──────────────────────────────────────────────────────────
+  // Perceptual (Lab) ramps with robust quantile domains, replacing the old
+  // linear beige lerps. Two problems those had: (1) a single outlier state
+  // (usually DC) stretched the min–max domain and washed every other state
+  // into the same light end; (2) when every state moved the same direction
+  // since the anchor (rents all up since Dec 2019), the zero-centered
+  // diverging scale painted the whole country one shade of red. Fixes:
+  // domains clamp at the 5th/95th percentile (legend says ≤ / ≥), and change
+  // maps only diverge when the data actually has both signs.
+  const d3 = window.d3;
+  const quant = (arr, p) => arr.length ? d3.quantile(arr, p) : null;
+  const clamp01 = (t) => Math.max(0, Math.min(1, t));
+
+  // Level mode: sequential, one hue — light cool tint → brand navy.
+  // Direction-neutral on purpose (dark = high, whatever high means).
+  const seqRamp = d3.interpolateLab('#E7EAF3', '#16233F');
+  let lvlLo = quant(vals, 0.05), lvlHi = quant(vals, 0.95);
+  if (!(lvlHi > lvlLo)) { lvlLo = Math.min(...vals); lvlHi = Math.max(...vals); }
   const levelColor = (v) => {
     if (v == null || !isFinite(v)) return NO_DATA;
-    const t = lvlMax > lvlMin ? (v - lvlMin) / (lvlMax - lvlMin) : 0.5;
-    const lerp = (s, e) => Math.round(s + (e - s) * t);
-    return `rgb(${lerp(244, 27)},${lerp(236, 42)},${lerp(216, 78)})`;
+    const t = lvlHi > lvlLo ? clamp01((v - lvlLo) / (lvlHi - lvlLo)) : 0.5;
+    return seqRamp(t);
   };
-  const fillFor = (v) => mapMode === 'level' ? levelColor(v) : divergingColor(v);
+
+  // Change mode, mixed signs: diverging red ↔ neutral ↔ blue (never red vs
+  // green — that pair collapses for red-green colorblind readers). `flip`
+  // handles metrics where rising is good: red is always "getting worse".
+  const flip = metric.invert_color ? -1 : 1;
+  const MID = '#F0EDE3';
+  const badRamp  = d3.interpolateLab(MID, '#A33124'); // deep warm red
+  const goodRamp = d3.interpolateLab(MID, '#2F5D96'); // clear blue
+  const hasPos = vals.some(v => v > 0), hasNeg = vals.some(v => v < 0);
+  const mixedSigns = hasPos && hasNeg;
+  const divCap = Math.max(quant(vals.map(Math.abs), 0.95) || 0, 0.1);
+  const divergingColor = (v) => {
+    if (v == null || !isFinite(v)) return NO_DATA;
+    const b = Math.max(-1, Math.min(1, (v * flip) / divCap)); // b > 0 = worse
+    return b >= 0 ? badRamp(b) : goodRamp(-b);
+  };
+
+  // Change mode, one shared direction: sequential over the actual spread —
+  // darker = the bigger move away from zero, red if the shared direction is
+  // bad, green if it's good (only one of the two ever appears at a time).
+  let chgLo = quant(vals, 0.05), chgHi = quant(vals, 0.95);
+  if (!(chgHi > chgLo)) { chgLo = Math.min(...vals); chgHi = Math.max(...vals); }
+  const sharedDirBad = hasPos ? flip > 0 : flip < 0;
+  const oneSignRamp = sharedDirBad ? badRamp : d3.interpolateLab(MID, '#1E5B41');
+  const oneSignColor = (v) => {
+    if (v == null || !isFinite(v)) return NO_DATA;
+    if (!(chgHi > chgLo)) return oneSignRamp(0.5);
+    const t = hasPos ? (v - chgLo) / (chgHi - chgLo) : (v - chgHi) / (chgLo - chgHi);
+    return oneSignRamp(clamp01(t));
+  };
+
+  const changeColor = mixedSigns ? divergingColor : oneSignColor;
+  const fillFor = (v) => mapMode === 'level' ? levelColor(v) : changeColor(v);
 
   const move = (e, code) => {
     const rect = boxRef.current ? boxRef.current.getBoundingClientRect() : { left: 0, top: 0, width: 0 };
@@ -1812,9 +1862,26 @@ function USMap({ metric, rows, pinned = [], onPick, anchorPhrase, mapMode }) {
   };
 
   const tipRow = tip ? byCode[tip.code] : null;
-  const legendGrad = mapMode === 'level'
-    ? `linear-gradient(90deg, ${levelColor(lvlMin)}, ${levelColor((lvlMin + lvlMax) / 2)}, ${levelColor(lvlMax)})`
-    : `linear-gradient(90deg, ${divergingColor(-maxAbs * flip)}, ${divergingColor(0)}, ${divergingColor(maxAbs * flip)})`;
+
+  // Legend: sample the active scale so the bar always matches the map, with
+  // ≤ / ≥ end labels because the domain is quantile-clamped.
+  const gradFrom = (fn, lo, hi) =>
+    `linear-gradient(90deg, ${[0, 0.25, 0.5, 0.75, 1].map(t => fn(lo + t * (hi - lo))).join(', ')})`;
+  const pfmt = (x) => `${x < 0 ? '−' : '+'}${Math.abs(x).toFixed(Math.abs(x) < 10 ? 1 : 0)}%`;
+  let legendGrad, legendLo, legendHi;
+  if (mapMode === 'level') {
+    legendGrad = gradFrom(levelColor, lvlLo, lvlHi);
+    legendLo = '≤ ' + fmtVal(lvlLo, metric.units);
+    legendHi = '≥ ' + fmtVal(lvlHi, metric.units);
+  } else if (mixedSigns) {
+    legendGrad = gradFrom(changeColor, -divCap, divCap);
+    legendLo = '≤ ' + pfmt(-divCap);
+    legendHi = '≥ ' + pfmt(divCap);
+  } else {
+    legendGrad = gradFrom(changeColor, chgLo, chgHi);
+    legendLo = '≤ ' + pfmt(chgLo);
+    legendHi = '≥ ' + pfmt(chgHi);
+  }
 
   return (
     <div ref={boxRef} style={{ position: 'relative', background: PAPER, border: '1px solid rgba(27,42,78,.18)', padding: '20px 20px 12px' }}>
@@ -1884,9 +1951,9 @@ function USMap({ metric, rows, pinned = [], onPick, anchorPhrase, mapMode }) {
           {mapMode === 'level' ? `Latest ${metric.label.toLowerCase()}` : `Change ${anchorPhrase}`} · gray = no data
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>{mapMode === 'level' ? fmtVal(lvlMin, metric.units) : `−${maxAbs.toFixed(0)}%`}</span>
+          <span>{legendLo}</span>
           <span style={{ width: 120, height: 10, background: legendGrad, display: 'inline-block' }} />
-          <span>{mapMode === 'level' ? fmtVal(lvlMax, metric.units) : `+${maxAbs.toFixed(0)}%`}</span>
+          <span>{legendHi}</span>
         </span>
       </div>
     </div>
@@ -1918,7 +1985,14 @@ function CompareMetricPanel({ metric, data, pinned, names, anchorId, displayMode
           <span style={{
             fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif', fontSize: 10, color: SOFT,
             textTransform: 'uppercase', letterSpacing: '.06em', textAlign: 'right',
-          }}>{metric.source_label} · {metric.frequency}</span>
+          }}>
+            {metric.source_url ? (
+              <a href={metric.source_url} target="_blank" rel="noopener noreferrer"
+                 style={{ color: SOFT, textDecoration: 'none', borderBottom: '1px dotted rgba(27,42,78,.3)' }}>
+                {metric.source_label} ↗
+              </a>
+            ) : metric.source_label} · {metric.frequency}
+          </span>
         </div>
       )}
       {failed ? (
@@ -1960,9 +2034,8 @@ function CompareView({ data, metricIds, setMetricIds, homeState, anchorId, displ
   }, [metricIds.join(',')]);
 
   if (!idx) return null;
-  // Metric pills are multi-select (up to 4 — the small-multiples request):
-  // clicking adds a panel, clicking again removes it; the first selected
-  // metric drives the all-states grid / map below.
+  // Metric pills are multi-select with no cap: clicking adds a panel,
+  // clicking again removes it (the last one can't be removed).
   const metricsSorted = idx.metrics.slice().sort((a, b) => a.label.localeCompare(b.label));
   const metrics = metricIds.map(id => idx.metrics.find(m => m.id === id)).filter(Boolean);
   const metric = metrics[0] || idx.metrics[0];
@@ -1970,7 +2043,7 @@ function CompareView({ data, metricIds, setMetricIds, homeState, anchorId, displ
     if (metricIds.includes(id)) {
       if (metricIds.length > 1) setMetricIds(metricIds.filter(m => m !== id));
     } else {
-      setMetricIds(metricIds.length >= 4 ? [...metricIds.slice(0, 3), id] : [...metricIds, id]);
+      setMetricIds([...metricIds, id]);
     }
   };
   const md = window.STATE_METRIC ? window.STATE_METRIC[metric.id] : null;
@@ -1979,12 +2052,10 @@ function CompareView({ data, metricIds, setMetricIds, homeState, anchorId, displ
   const names = { US: 'United States' };
   idx.states.forEach(s => { names[s.code] = s.name; });
 
+  // No cap on pinned states — pin all 51 if you want. Colors cycle past the
+  // palette length; the chips and tooltips still name every line.
   const togglePin = (code) => {
-    setPinned(prev => {
-      if (prev.includes(code)) return prev.filter(c => c !== code);
-      const next = [...prev, code];
-      return next.length > PIN_COLORS.length ? next.slice(next.length - PIN_COLORS.length) : next;
-    });
+    setPinned(prev => prev.includes(code) ? prev.filter(c => c !== code) : [...prev, code]);
   };
 
   // "+ Add" dropdown: the US average is just another option, listed first.
@@ -2013,7 +2084,7 @@ function CompareView({ data, metricIds, setMetricIds, homeState, anchorId, displ
           const on = metricIds.includes(m.id);
           return (
             <button key={m.id} onClick={() => toggleMetric(m.id)}
-              title={on ? 'Remove this chart' : 'Add this chart (up to 4)'}
+              title={on ? 'Remove this chart' : 'Add this chart'}
               style={{
                 fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
                 fontSize: 13, fontWeight: on ? 700 : 600,
@@ -2027,7 +2098,7 @@ function CompareView({ data, metricIds, setMetricIds, homeState, anchorId, displ
         })}
         <span style={{
           fontFamily: 'Publico, Georgia, serif', fontSize: 12.5, fontStyle: 'italic', color: MUTE,
-        }}>Pick up to four to compare side by side.</span>
+        }}>Pick as many as you want to compare side by side.</span>
       </div>
 
       <div className="at-pad" style={{ padding: '36px 56px 56px' }}>
@@ -2043,7 +2114,16 @@ function CompareView({ data, metricIds, setMetricIds, homeState, anchorId, displ
                 {metrics.length === 1 ? `${metric.label} — pick states to overlay` : `${metrics.length} metrics, side by side`}
               </span>
               <span className="at-section-dek" style={styles.sectionDek}>
-                {metrics.length === 1 ? `${metric.source_label} · ${metric.frequency}` : 'Same pinned states on every panel.'}
+                {metrics.length === 1 ? (
+                  <React.Fragment>
+                    {metric.source_url ? (
+                      <a href={metric.source_url} target="_blank" rel="noopener noreferrer"
+                         style={{ color: MUTE, textDecoration: 'none', borderBottom: '1px dotted rgba(27,42,78,.3)' }}>
+                        {metric.source_label} ↗
+                      </a>
+                    ) : metric.source_label} · {metric.frequency}
+                  </React.Fragment>
+                ) : 'Same pinned states on every panel.'}
               </span>
             </div>
 
@@ -2092,10 +2172,17 @@ function CompareView({ data, metricIds, setMetricIds, homeState, anchorId, displ
 }
 
 // ── Map view: the US choropleth as its own tab, one metric at a time ────────
-function MapView({ data, metricId, setMetricId, anchorId, priceType }) {
+function MapView({ data, metricId, setMetricId, anchorId, priceType, displayMode }) {
   const idx = window.AFFORDABILITY_STATES;
   const cpiData = data.cpi_all_items ? data.cpi_all_items.data : null;
   const [mapMode, setMapMode] = useState('change'); // 'change' | 'level'
+  // Click-to-pin: clicking a state on the map adds it to the overlay chart
+  // below (and outlines it on the map); clicking again removes it. Pins
+  // survive metric switches so you can walk one set of states across metrics.
+  const [pinned, setPinned] = useState([]);
+  const togglePin = (code) => {
+    setPinned(prev => prev.includes(code) ? prev.filter(c => c !== code) : [...prev, code]);
+  };
   const [, setLoadTick] = useState(0);
   const [failedIds, setFailedIds] = useState(() => new Set());
 
@@ -2182,7 +2269,12 @@ function MapView({ data, metricId, setMetricId, anchorId, priceType }) {
               <span style={styles.sectionLabel}>§01</span>
               <span style={styles.sectionTitle}>All states — {metric.label}</span>
               <span className="at-section-dek" style={styles.sectionDek}>
-                {metric.source_label} · {metric.frequency} · hover any state for its values.
+                {metric.source_url ? (
+                  <a href={metric.source_url} target="_blank" rel="noopener noreferrer"
+                     style={{ color: MUTE, textDecoration: 'none', borderBottom: '1px dotted rgba(27,42,78,.3)' }}>
+                    {metric.source_label} ↗
+                  </a>
+                ) : metric.source_label} · {metric.frequency} · hover any state, click to pin it on the chart.
               </span>
               <span style={{ display: 'flex', gap: 6, marginLeft: 16, flexWrap: 'wrap' }}>
                 <button onClick={() => setMapMode('change')} style={styles.modeBtn(mapMode === 'change')}>Change</button>
@@ -2190,7 +2282,7 @@ function MapView({ data, metricId, setMetricId, anchorId, priceType }) {
               </span>
             </div>
 
-            <USMap metric={metric} rows={rows}
+            <USMap metric={metric} rows={rows} pinned={pinned} onPick={togglePin}
                    anchorPhrase={anchorById(anchorId).phrase} mapMode={mapMode} />
 
             <div style={{
@@ -2200,6 +2292,59 @@ function MapView({ data, metricId, setMetricId, anchorId, priceType }) {
               % change is measured {anchorById(anchorId).phrase}. Ranks are on the latest value (1 = highest — direction-neutral: highest rent is bad, highest income is good).
               {metric.id === 'rent' && ' State rents aggregate Zillow county data with renter-household weights; states where coverage falls below half of renter households are omitted.'}
             </div>
+
+            {/* Click-to-pin overlay chart: every state clicked on the map is
+                drawn here; clicking more states keeps adding lines. */}
+            <div className="at-section-head" style={{ ...styles.sectionHead, marginTop: 44 }}>
+              <span style={styles.sectionLabel}>§02</span>
+              <span style={styles.sectionTitle}>
+                {pinned.length
+                  ? `${metric.label} — ${pinned.length} ${pinned.length === 1 ? 'state' : 'states'} pinned`
+                  : 'Pin states to chart them'}
+              </span>
+              <span className="at-section-dek" style={styles.sectionDek}>
+                Click states on the map to add them; click a state or its chip to remove it.
+              </span>
+            </div>
+            {pinned.length === 0 ? (
+              <div style={{
+                background: PAPER, border: `1px solid rgba(27,42,78,.18)`,
+                padding: '36px 32px', textAlign: 'center',
+                fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE,
+              }}>
+                Click any state on the map above to start a comparison chart.
+              </div>
+            ) : (
+              <React.Fragment>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+                  {pinned.map((code, i) => (
+                    <button key={code} onClick={() => togglePin(code)} style={{
+                      fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif', fontSize: 12, fontWeight: 700,
+                      display: 'inline-flex', alignItems: 'center', gap: 7,
+                      padding: '6px 12px', borderRadius: 100, cursor: 'pointer',
+                      border: `1.5px solid ${PIN_COLORS[i % PIN_COLORS.length]}`,
+                      background: hexToRgba(PIN_COLORS[i % PIN_COLORS.length], 0.09), color: INK,
+                    }} title="Remove from chart">
+                      <span style={{ width: 10, height: 10, borderRadius: 5, background: PIN_COLORS[i % PIN_COLORS.length] }} />
+                      {names[code] || code} ✕
+                    </button>
+                  ))}
+                  <button onClick={() => setPinned([])}
+                    style={{ ...styles.smallBtn, border: 'none', textDecoration: 'underline', textUnderlineOffset: 3, fontSize: 10 }}
+                  >Clear all</button>
+                </div>
+                <div style={{ background: 'transparent', borderTop: `2px solid ${metric.color}`, padding: '14px 2px 10px' }}>
+                  <CompareChart
+                    metric={metric}
+                    seriesList={pinned.map((code, i) => {
+                      const s = md.states[code];
+                      if (!s) return null;
+                      return { label: names[code] || code, color: PIN_COLORS[i % PIN_COLORS.length], data: deflate(s.data) };
+                    }).filter(Boolean)}
+                    anchorId={anchorId} displayMode={displayMode} height={340} />
+                </div>
+              </React.Fragment>
+            )}
           </React.Fragment>
         )}
       </div>
@@ -2232,9 +2377,9 @@ function AppMain({ data }) {
   const [displayMode, setDisplayMode] = useState(hash.mode === 'pct' ? 'pct' : 'level');
   const [priceType, setPriceType] = useState(hash.type === 'real' ? 'real' : 'nominal');
   const [stateCode, setStateCode] = useState(validState(hash.state) ? hash.state : 'CA');
-  // Compare view supports up to four metrics (comma-separated in the hash).
+  // Compare view supports any number of metrics (comma-separated in the hash).
   const [metricIds, setMetricIds] = useState(() => {
-    const fromHash = (hash.metric || '').split(',').filter(validMetric).slice(0, 4);
+    const fromHash = (hash.metric || '').split(',').filter(validMetric);
     if (fromHash.length) return fromHash;
     return [idx && idx.metrics[0] ? idx.metrics[0].id : 'unemployment'];
   });
@@ -2355,7 +2500,7 @@ function AppMain({ data }) {
       {view === 'compare'  && <CompareView data={data} metricIds={metricIds} setMetricIds={setMetricIds}
                                            homeState={stateCode} anchorId={anchorId} displayMode={displayMode} priceType={priceType} />}
       {view === 'map'      && <MapView data={data} metricId={mapMetricId} setMetricId={setMapMetricId}
-                                       anchorId={anchorId} priceType={priceType} />}
+                                       anchorId={anchorId} priceType={priceType} displayMode={displayMode} />}
 
       {/* Footer */}
       <div className="at-pad" style={{ padding: '0 56px 48px' }}>
