@@ -470,5 +470,17 @@
   </div>
 
 </div>
+
+<script>
+  // The tracker forwards its state hash (#view=...&state=...) when linking
+  // here, so the back links can return the reader to the view they left.
+  (function () {
+    var h = window.location.hash;
+    if (!h) return;
+    document.querySelectorAll('a[href="index.html"]').forEach(function (a) {
+      a.href = 'index.html' + h;
+    });
+  })();
+</script>
 </body>
 </html>

@@ -151,11 +151,21 @@ loudly when absent).
   (`view=map&metric=rent` for the map tab; `state=US` is valid).
 - Embed mode via the query string (`?embed=1`, composes with any hash): for
   the iframe on the ESP site, which brings its own header. Hides the navy
-  topbar + hero, moves the view tabs into a light bar, menu bars go
-  `#F4F2E4`, page/chart background goes white, and `height:100%`/min-heights
-  come off `body`/`#root` so the height-postMessage script at the bottom of
-  the page (`esp-dashboard-height`, consumed by the ESP parent page — see
-  DEPLOYMENT.md) can shrink as well as grow. Standalone design is untouched.
+  topbar + hero, moves the view tabs into a light bar (with an "About the
+  data" link on its right), menu bars go `#F4F2E4`, page/chart background
+  goes white, and `height:100%`/min-heights come off `body`/`#root` so the
+  height-postMessage script at the bottom of the page
+  (`esp-dashboard-height`, consumed by the ESP parent page — see
+  DEPLOYMENT.md) can shrink as well as grow. About opens *in-app* in embed
+  mode — the iframe must never navigate to about.html, which has no height
+  script or embed chrome. `AboutView` fetches about.html (same origin),
+  injects its `<main>` under the scoped `.at-about` styles (kept in sync
+  with about.html's own CSS), and is a fifth view (`view=about`, embed-only,
+  deep-linkable) with "Back to the tracker" returning to the view the reader
+  left; entering/leaving it scrolls the app top back into view
+  (scrollIntoView reaches the parent page's scroll cross-origin).
+  Standalone stays same-tab and forwards the state hash to about.html,
+  whose back links return it. Standalone design is untouched.
 - Index-unit series (`rebase: true`) always display as cumulative % change,
   never raw index points. The 2019 anchor is Dec 2019 (not 2020 — avoids COVID
   base effects). Don't change these without flagging it.

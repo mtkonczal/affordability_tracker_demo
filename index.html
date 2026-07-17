@@ -56,6 +56,63 @@
   html.embed body { background: #FFFFFF; }
   html.embed #root { background: #FFFFFF; min-height: 0; }
   html.embed #stage { background: #FFFFFF; box-shadow: none; }
+
+  /* In-app About view (embed mode). The content is fetched from about.html's
+     <main> and injected verbatim, so these rules mirror that page's styles for
+     the classes the content uses (h2/.sec, .lead, .note, tables, .freq badges,
+     .method boxes), scoped under .at-about and mapped to this page's fonts. */
+  .at-about { --rule: rgba(27,42,78,.18); font-size: 14px; }
+  .at-about h2 {
+    font-family: Publico, Georgia, serif;
+    font-size: 27px; font-weight: 500; margin: 44px 0 6px;
+    padding-bottom: 8px; border-bottom: 1px solid rgba(27,42,78,.25);
+    display: flex; align-items: baseline; gap: 14px;
+  }
+  .at-about h2 .sec {
+    font-family: "Neue Haas Grotesk Display Pro", sans-serif;
+    font-size: 12px; letter-spacing: .22em; text-transform: uppercase;
+    font-weight: 700; color: #E04E39;
+  }
+  .at-about h2:first-of-type { margin-top: 0; }
+  .at-about p.lead { margin: 14px 0 18px; font-size: 15.5px; line-height: 1.65; max-width: 820px; }
+  .at-about p.note { margin: 12px 0; font-size: 13.5px; line-height: 1.6; color: #6B6E78; max-width: 820px; }
+  .at-about .table-wrap { overflow-x: auto; margin: 18px 0 8px; }
+  .at-about table {
+    width: 100%; border-collapse: collapse; background: #FBF7EE;
+    border: 1px solid var(--rule); font-size: 13.5px;
+  }
+  .at-about th {
+    font-family: "Neue Haas Grotesk Display Pro", sans-serif;
+    font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+    font-weight: 700; color: #6B6E78; text-align: left;
+    padding: 10px 14px; border-bottom: 1px solid var(--rule);
+    background: rgba(27,42,78,.045);
+  }
+  .at-about td { padding: 11px 14px; border-bottom: 1px solid rgba(27,42,78,.09); vertical-align: top; line-height: 1.5; }
+  .at-about tr:last-child td { border-bottom: none; }
+  .at-about td b { font-weight: 600; }
+  .at-about td a { color: #1B2A4E; }
+  .at-about .freq {
+    font-family: "Neue Haas Grotesk Display Pro", sans-serif;
+    display: inline-block; font-size: 10.5px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+  }
+  .at-about .freq.m { background: #E7F4EE; color: #2E7D5B; }
+  .at-about .freq.w { background: #E7F4EE; color: #2E7D5B; }
+  .at-about .freq.q { background: #FBF2DC; color: #B5820A; }
+  .at-about .freq.a { background: #FBE7E7; color: #B33636; }
+  .at-about .method {
+    background: #FBF7EE; border: 1px solid var(--rule); border-left: 3px solid #E04E39;
+    padding: 16px 20px; margin: 14px 0; max-width: 860px;
+  }
+  .at-about .method h3 {
+    font-family: "Neue Haas Grotesk Display Pro", sans-serif;
+    font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: #1B2A4E; margin-bottom: 6px;
+  }
+  .at-about .method p { font-size: 13.5px; line-height: 1.6; }
+  .at-about .method p + p { margin-top: 8px; }
 </style>
 
 <script>
@@ -656,6 +713,15 @@ const SOFT = '#9A9CA3';
 const EMBED = document.documentElement.classList.contains('embed');
 const MENU_BG = EMBED ? '#F4F2E4' : PAPER;
 const PAGE_BG = EMBED ? '#FFFFFF' : BEIGE;
+
+// About-page links, standalone mode: same-tab navigation to about.html,
+// carrying the state hash so its back links can restore the view. In embed
+// mode the iframe must never navigate away (about.html has no height script
+// and no embed chrome) — links open the in-app AboutView instead; see
+// aboutProps in AppMain.
+const ABOUT_LINK_PROPS = {
+  onClick: (e) => { e.currentTarget.href = 'about.html' + window.location.hash; },
+};
 
 // ── Real (inflation-adjusted) transform ─────────────────────────────────────
 // One global Nominal/Real switch drives the whole page. "Real" deflates a
@@ -3010,6 +3076,72 @@ function YearAnchorSelect({ anchorId, setAnchorId }) {
   );
 }
 
+// In-app About view (embed mode): the iframe must never navigate to
+// about.html (no height script, no embed chrome), so the sources & methods
+// content is fetched from about.html's <main> — same origin, single source of
+// truth — and injected under the scoped .at-about styles. Cached per page load.
+let ABOUT_HTML_CACHE = null;
+function AboutView({ onBack }) {
+  const [html, setHtml] = useState(ABOUT_HTML_CACHE);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (html) return;
+    fetch('about.html')
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      .then(t => {
+        const main = new DOMParser().parseFromString(t, 'text/html').querySelector('main');
+        if (!main) throw new Error('about.html has no <main>');
+        ABOUT_HTML_CACHE = main.innerHTML;
+        setHtml(ABOUT_HTML_CACHE);
+      })
+      .catch(() => setFailed(true));
+  }, []);
+
+  const backBtn = (
+    <button onClick={onBack} style={{
+      background: 'none', border: 'none', cursor: 'pointer', padding: '1px 0',
+      fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+      fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', fontWeight: 600,
+      color: NAVY, borderBottom: '1px dotted rgba(27,42,78,.45)',
+    }}>← Back to the tracker</button>
+  );
+
+  return (
+    <div className="at-pad" style={{ padding: '34px 56px 40px' }}>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        gap: 12, flexWrap: 'wrap', marginBottom: 10,
+      }}>
+        <h2 style={{
+          fontFamily: 'Publico, Georgia, serif', fontSize: 34, fontWeight: 500,
+          letterSpacing: '-.01em', margin: 0,
+        }}>About the data.</h2>
+        {backBtn}
+      </div>
+      <p style={{
+        fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic',
+        fontSize: 15.5, lineHeight: 1.55, color: MUTE, maxWidth: 760, margin: '0 0 30px',
+      }}>
+        Every number on the tracker comes from a public, verifiable source, refreshed
+        automatically, with the series identifier one click away. This page says exactly
+        where each figure comes from, how often it updates, and what it can and cannot claim.
+      </p>
+      {failed ? (
+        <p style={{ fontSize: 14, lineHeight: 1.6 }}>
+          The sources &amp; methods page couldn't be loaded here.{' '}
+          <a href="about.html" target="_blank" rel="noopener" style={{ color: NAVY }}>
+            Open it in a new tab →</a>
+        </p>
+      ) : html ? (
+        <div className="at-about" dangerouslySetInnerHTML={{ __html: html }} />
+      ) : (
+        <p style={{ fontSize: 14, color: MUTE }}>Loading sources &amp; methods…</p>
+      )}
+      {html && <div style={{ marginTop: 36 }}>{backBtn}</div>}
+    </div>
+  );
+}
+
 function AppMain({ data }) {
   const idx = window.AFFORDABILITY_STATES;
   const hash = useMemo(parseHash, []);
@@ -3018,8 +3150,22 @@ function AppMain({ data }) {
   const validState = (c) => c === 'US' || (idx && idx.states.some(s => s.code === c));
   const validMetric = (m) => idx && idx.metrics.some(x => x.id === m);
 
+  // 'about' is a real view only in embed mode; standalone navigates to about.html.
+  const viewIds = EMBED
+    ? ['national', 'state', 'compare', 'map', 'about']
+    : ['national', 'state', 'compare', 'map'];
   const [view, setView] = useState(
-    ['national', 'state', 'compare', 'map'].includes(hash.view) && (hash.view === 'national' || idx) ? hash.view : 'national');
+    viewIds.includes(hash.view) && (['national', 'about'].includes(hash.view) || idx) ? hash.view : 'national');
+  // Where "Back to the tracker" returns from the in-app About view.
+  const [aboutReturnView, setAboutReturnView] = useState('national');
+  const openAbout = (e) => {
+    e.preventDefault();
+    if (view !== 'about') setAboutReturnView(view);
+    setView('about');
+  };
+  // Embed: About opens in-app (the iframe must never navigate away).
+  // Standalone: same-tab navigation to about.html, carrying the state hash.
+  const aboutProps = EMBED ? { onClick: openAbout } : ABOUT_LINK_PROPS;
   const validAnchor = (a) => ANCHORS.some(x => x.id === a) || /^y:\d{4}$/.test(a || '');
   const [anchorId, setAnchorId] = useState(validAnchor(hash.anchor) ? hash.anchor : '2019');
   const [displayMode, setDisplayMode] = useState(hash.mode === 'pct' ? 'pct' : 'level');
@@ -3052,6 +3198,18 @@ function AppMain({ data }) {
     window.history.replaceState(null, '', '#' + parts.join('&'));
   }, [view, anchorId, displayMode, priceType, stateCode, metricIds, mapMetricId]);
 
+  // Entering or leaving the About view replaces the whole content area, so
+  // bring the top of the app back into view. scrollIntoView propagates to the
+  // ESP parent page's scroll even cross-origin, unlike window.scrollTo.
+  const rootRef = useRef(null);
+  const lastViewRef = useRef(view);
+  useEffect(() => {
+    const crossed = lastViewRef.current !== view &&
+      (view === 'about' || lastViewRef.current === 'about');
+    lastViewRef.current = view;
+    if (crossed && rootRef.current) rootRef.current.scrollIntoView({ block: 'start' });
+  }, [view]);
+
   const lastUpdated = (() => {
     const stamps = Object.values(data).map(d => d.last_updated).filter(Boolean).sort();
     return stamps.length ? stamps[stamps.length - 1] : null;
@@ -3067,13 +3225,13 @@ function AppMain({ data }) {
   ];
 
   return (
-    <div style={styles.root}>
+    <div ref={rootRef} style={styles.root}>
       {/* Standalone chrome: navy top bar + hero. Hidden in embed mode — the
           ESP site header takes their place and the tabs move below. */}
       {!EMBED && (
         <div className="at-pad" style={styles.topbar}>
           <span>Economic Security Project</span>
-          <a href="about.html" style={{
+          <a href="about.html" {...ABOUT_LINK_PROPS} style={{
             color: PAPER, textDecoration: 'none',
             borderBottom: '1px dotted rgba(244,236,216,.5)', paddingBottom: 1,
           }}>About the data →</a>
@@ -3124,25 +3282,33 @@ function AppMain({ data }) {
               {v.label}
             </button>
           ))}
-          {lastUpdated && (
-            <span style={{
-              marginLeft: 'auto',
-              fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-              fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase',
-              color: MUTE, fontWeight: 600,
-            }}>
-              Updated {new Date(lastUpdated + 'T12:00:00').toLocaleDateString('en-US', {
-                year: 'numeric', month: 'long', day: 'numeric',
-              })}
-            </span>
-          )}
+          <span style={{
+            marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
+            fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
+            fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase',
+            color: MUTE, fontWeight: 600,
+          }}>
+            {lastUpdated && (
+              <span>
+                Updated {new Date(lastUpdated + 'T12:00:00').toLocaleDateString('en-US', {
+                  year: 'numeric', month: 'long', day: 'numeric',
+                })}
+              </span>
+            )}
+            <a href="about.html" {...aboutProps} style={{
+              color: NAVY, textDecoration: 'none',
+              borderBottom: view === 'about' ? '1px solid #1B2A4E' : '1px dotted rgba(27,42,78,.45)',
+              paddingBottom: 1,
+            }}>About the data →</a>
+          </span>
         </div>
       )}
 
       {/* Global controls: anchor + $/%. Hidden on the Map view — the map is
           levels-only with its own year dropdown, and the anchor + Nominal/Real
-          controls live on its pinned-states chart instead. */}
-      {view !== 'map' && (
+          controls live on its pinned-states chart instead — and on the About
+          view, which has no charts. */}
+      {view !== 'map' && view !== 'about' && (
       <div className="at-pad at-controls" style={styles.controls}>
         <span style={styles.controlLabel}>Measure from</span>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -3172,7 +3338,7 @@ function AppMain({ data }) {
       </div>
       )}
 
-      {priceType === 'real' && (
+      {priceType === 'real' && view !== 'about' && (
         <div className="at-pad" style={{ padding: '10px 56px 0' }}>
           <div style={{ fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', fontSize: 12.5, color: MUTE }}>
             Real: dollar and price-index series are inflation-adjusted to {realBaseYear} dollars using CPI-U (all items).
@@ -3189,6 +3355,7 @@ function AppMain({ data }) {
       {view === 'map'      && <MapView data={data} metricId={mapMetricId} setMetricId={setMapMetricId}
                                        anchorId={anchorId} setAnchorId={setAnchorId}
                                        priceType={priceType} setPriceType={setPriceType} />}
+      {view === 'about'    && <AboutView onBack={() => setView(aboutReturnView)} />}
 
       {/* Footer */}
       <div className="at-pad" style={{ padding: '0 56px 48px' }}>
@@ -3199,7 +3366,7 @@ function AppMain({ data }) {
           textTransform: 'uppercase',
           display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
         }}>
-          <a href="about.html" style={{ color: MUTE, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+          <a href="about.html" {...aboutProps} style={{ color: MUTE, textDecoration: 'underline', textUnderlineOffset: 3 }}>
             About the data: sources & methods
           </a>
           <span style={{ textAlign: 'right' }}>
