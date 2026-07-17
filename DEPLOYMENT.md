@@ -101,8 +101,12 @@ Run workflow.
 ## Local preview
 
 ```bash
-open index.html
+open index.html        # standalone design
+open embed_test.html   # embed mode, inside a local stand-in for the ESP page
 ```
 
 No build step, no server required — it's a single self-contained HTML file
-that reads `data/app_data.js`.
+that reads `data/app_data.js`. `embed_test.html` wraps `index.html?embed=1`
+in an iframe with the same attributes and height listener as the snippet
+above, so embed behavior (auto-resize, in-app About) can be tested before
+deploying.

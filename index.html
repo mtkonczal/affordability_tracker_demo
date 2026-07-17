@@ -3070,21 +3070,18 @@ function YearAnchorSelect({ anchorId, setAnchorId }) {
 
 // In-app About view, both modes (in embed the iframe must never navigate to
 // about.html — no height script, no embed chrome). The sources & methods
-// content is fetched from about.html's <main> — same origin, single source of
-// truth — and injected under the scoped .at-about styles. Cached per page load.
-let ABOUT_HTML_CACHE = null;
+// content lives in assets/about_content.js — a script payload shared with
+// about.html, lazy-loaded the same way as the data/*.js files (works on
+// file:// too, where fetch() is blocked) — injected under .at-about styles.
 function AboutView({ onBack }) {
-  const [html, setHtml] = useState(ABOUT_HTML_CACHE);
+  const [html, setHtml] = useState(window.ABOUT_CONTENT || null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     if (html) return;
-    fetch('about.html')
-      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
-      .then(t => {
-        const main = new DOMParser().parseFromString(t, 'text/html').querySelector('main');
-        if (!main) throw new Error('about.html has no <main>');
-        ABOUT_HTML_CACHE = main.innerHTML;
-        setHtml(ABOUT_HTML_CACHE);
+    loadDataFile('assets/about_content.js')
+      .then(() => {
+        if (!window.ABOUT_CONTENT) throw new Error('about_content.js defined nothing');
+        setHtml(window.ABOUT_CONTENT);
       })
       .catch(() => setFailed(true));
   }, []);

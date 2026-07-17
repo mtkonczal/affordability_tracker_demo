@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Embed test harness — Affordability Tracker</title>
+<style>
+  /* Local stand-in for the ESP page that hosts the tracker iframe.
+     Open this file directly (or via the static server) to test embed mode
+     without deploying. The iframe attributes and the height listener below
+     mirror the snippet in DEPLOYMENT.md — keep them in sync. */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #FFFFFF; }
+  .fake-esp-header {
+    background: #1B2A4E; color: #FBF7EE;
+    padding: 18px 32px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .fake-esp-header b { font-size: 15px; letter-spacing: .02em; }
+  .fake-esp-header span { font-size: 12px; opacity: .7; }
+  .page-title { padding: 28px 32px 6px; }
+  .page-title h1 { font-size: 26px; color: #1B2A4E; }
+  .page-title p { margin-top: 6px; font-size: 13px; color: #6B6E78; }
+  .fake-esp-footer {
+    margin-top: 0; padding: 24px 32px; background: #1B2A4E;
+    color: rgba(251,247,238,.7); font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="fake-esp-header">
+  <b>economicsecurityproject.org</b>
+  <span>local embed test — this bar plays the ESP site header</span>
+</div>
+
+<div class="page-title">
+  <h1>Affordability Data Tracker</h1>
+  <p>The iframe below is embedded exactly as on the live ESP page (see DEPLOYMENT.md).</p>
+</div>
+
+<!-- Same attributes as the live ESP embed, src pointed at the local file.
+     The sandbox is applied conditionally below: sandboxed frames get a
+     "null" origin, and browsers refuse to serve file:// subresources to a
+     null origin — the tracker's data/*.js payloads would be blocked and the
+     app shows "No data loaded". So the sandbox is kept when this page is
+     served over http (faithful to the live embed) and dropped when the file
+     is opened straight from the directory. -->
+<iframe
+  id="affordability-tracker"
+  title="Affordability Tracker"
+  style="width:100%; border:0; min-height:1400px;"
+  loading="lazy">
+</iframe>
+<script>
+  (function () {
+    var f = document.getElementById("affordability-tracker");
+    if (window.location.protocol !== "file:") {
+      f.setAttribute("sandbox", "allow-scripts allow-popups allow-downloads");
+    }
+    f.src = "index.html?embed=1";
+  })();
+</script>
+
+<div class="fake-esp-footer">
+  Fake ESP footer — if the auto-resize is working, this sits flush against the
+  end of the tracker with no iframe scrollbar above it.
+</div>
+
+<script>
+  // The height listener from DEPLOYMENT.md, verbatim: the tracker posts
+  // { type: "esp-dashboard-height", height } whenever its content height
+  // changes and the parent resizes the iframe to match.
+  window.addEventListener("message", function (e) {
+    if (e.data && e.data.type === "esp-dashboard-height") {
+      document.getElementById("affordability-tracker").style.height =
+        e.data.height + "px";
+    }
+  });
+</script>
+</body>
+</html>
