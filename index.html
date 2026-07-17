@@ -499,28 +499,103 @@ function categoryLabel(category) {
   return CATEGORY_LABELS[category] || 'Big-ticket';
 }
 
-// Press-release-ready sentence for the "Copy fact" button. Composes the two
-// message anchors (Jan 2025 and pre-pandemic) plus the level for dollar
-// series, and always names the source.
+// Press-release-ready sentence for the "Copy fact" button. Leads with the
+// card's active range (opts.anchorId / opts.since) as a from→to construction
+// with both endpoint readings, so the number can be checked; then appends
+// whichever of the two message anchors (Jan 2025, Dec 2019) isn't already
+// shown, and always names the source. Percent-unit series change in
+// percentage points — "up 12%" on a rate is a percent-of-a-percent that
+// fact-checkers flag. Index series quote % change only, never index levels.
 function buildFactText(item, opts = {}) {
   const name = opts.factLabel || item.label;
-  const isDollar = (item.units || '').includes('$') || (item.units || '').toLowerCase().includes('gallon');
-  const b25 = pctChange(item.data, '2025-01-01');
-  const b19 = pctChange(item.data, '2019-12-01');
-  const dir = (v) => v >= 0 ? 'up' : 'down';
+  const data = item.data || [];
+  const units = item.units || '';
+  const isPctUnits = units.includes('%');
+  const isIndex = item.rebase || /^Index/.test(units);
+  const anchorId = opts.anchorId || '2019';
+  const since = opts.since || anchorDate(anchorId, data);
+
+  // fmtVal drops denominators ("$ per Gallon" → "$3.12"); spell them back out
+  // so the sentence stands alone. Payrolls arrive in thousands — say millions.
+  const fmtQty = (v) => {
+    if (/^thousands/i.test(units)) return `${(v / 1000).toFixed(1)} million`;
+    const s = fmtVal(v, units);
+    const per = units.match(/^\$ per (\w+)/i);
+    if (per) return `${s} per ${per[1].toLowerCase()}`;
+    if (/^weeks/i.test(units)) return `${s} weeks`;
+    return s;
+  };
+
+  // Last reading at/before a date (data is sorted ascending)
+  const ptAt = (dateStr) => {
+    const cutoff = new Date(dateStr);
+    let p = null;
+    for (const d of data) { if (new Date(d.date) <= cutoff) p = d; else break; }
+    return p;
+  };
+
+  // Endpoints of the active range: the anchor reading — clamped forward to
+  // the first available reading when the anchor predates the series, the
+  // same clamp the chart applies — and the latest reading.
+  const latestPt = data.length ? data[data.length - 1] : null;
+  let startPt = null;
+  if (data.length >= 2) {
+    startPt = ptAt(since) || data[0];
+    if (startPt.date === latestPt.date) startPt = null;
+  }
+
+  // "up 4.2%" — or "up 1.1 percentage points" for %-unit series
+  const changeWords = (from, to, ppWord) => {
+    if (isPctUnits) {
+      const pp = to - from;
+      return Math.abs(pp) < 0.05 ? 'essentially unchanged'
+        : `${pp >= 0 ? 'up' : 'down'} ${Math.abs(pp).toFixed(1)} ${ppWord}`;
+    }
+    if (!from) return null;
+    const pct = ((to - from) / from) * 100;
+    return Math.abs(pct) < 0.05 ? 'essentially unchanged'
+      : `${pct >= 0 ? 'up' : 'down'} ${Math.abs(pct).toFixed(1)}%`;
+  };
+
+  // Main clause: what the card is showing right now. Colon form ("Eggs:
+  // $4.12 per dozen in ...") sidesteps singular/plural verb agreement.
+  let main;
+  if (startPt && latestPt) {
+    const chg = changeWords(startPt.value, latestPt.value, 'percentage points');
+    if (isIndex) {
+      main = chg ? `${name}: ${chg} since ${fmtDate(startPt.date)}, as of ${fmtDate(latestPt.date)}`
+                 : `${name} (${fmtDate(latestPt.date)})`;
+    } else {
+      main = `${name}: ${fmtQty(latestPt.value)} in ${fmtDate(latestPt.date)}, `
+        + (chg ? `${chg} from` : 'compared with')
+        + ` ${fmtQty(startPt.value)} in ${fmtDate(startPt.date)}`;
+    }
+  } else if (latestPt || item.latest_value != null) {
+    const v = latestPt ? latestPt.value : item.latest_value;
+    const dt = latestPt ? latestPt.date : item.latest_date;
+    main = (isIndex || v == null) ? `${name} (${fmtDate(dt)})` : `${name}: ${fmtQty(v)} in ${fmtDate(dt)}`;
+  } else {
+    main = name;
+  }
+
+  // The message anchors the active view isn't already showing
+  const secondary = (fromDate, label) => {
+    const p = ptAt(fromDate);
+    if (!p || !latestPt || p.date === latestPt.date || (startPt && p.date === startPt.date)) return null;
+    const chg = changeWords(p.value, latestPt.value, 'points');
+    return chg ? `${chg} ${label}` : null;
+  };
   const clauses = [];
-  if (b25 != null) clauses.push(`${dir(b25)} ${Math.abs(b25).toFixed(1)}% since January 2025`);
-  if (b19 != null) clauses.push(`${dir(b19)} ${Math.abs(b19).toFixed(1)}% since December 2019`);
-  const changePart = clauses.length ? ` — ${clauses.join(', ')}` : '';
-  const level = isDollar && item.latest_value != null
-    ? `${name}: ${fmtVal(item.latest_value, item.units)} (${fmtDate(item.latest_date)})`
-    : `${name} (${fmtDate(item.latest_date)})`;
+  if (anchorId !== '2025') { const c = secondary('2025-01-01', 'since January 2025'); if (c) clauses.push(c); }
+  if (anchorId !== '2019') { const c = secondary('2019-12-01', 'since December 2019'); if (c) clauses.push(c); }
+  if (opts.realYear) clauses.push(`inflation-adjusted to ${opts.realYear} dollars, CPI-U`);
+  const secondaries = clauses.length ? ` (${clauses.join('; ')})` : '';
+
   const src = item.fred_id
     ? `${item.source_note || 'FRED'} series ${item.fred_id}`
     : (item.source_note || 'federal data');
-  const realNote = opts.realYear ? ` (inflation-adjusted to ${opts.realYear} dollars, CPI-U)` : '';
   const rankPart = opts.rankText ? ` — ${opts.rankText}` : '';
-  return `${level}${changePart}${realNote}${rankPart}. Source: ${src}, via the Economic Security Project Affordability Tracker.`;
+  return `${main}${secondaries}${rankPart}. Source: ${src}, via the Economic Security Project Affordability Tracker.`;
 }
 
 // Lazy loader for the split state payloads (data/states/*.js and
@@ -850,19 +925,23 @@ const styles = {
 };
 
 // ── Copy-fact button (shared by all cards) ──────────────────────────────────
-function CopyFactButton({ item, factLabel, priceType, cpiData, rankText }) {
+function CopyFactButton({ item, factLabel, priceType, cpiData, rankText, anchorId, since }) {
   const [copied, setCopied] = useState(false);
+  // Build the sentence at render time so the hover tooltip previews exactly
+  // what a click puts on the clipboard. Match it to what's on screen: deflate
+  // first in real mode so the numbers line up with the chart the reader is
+  // seeing, and anchorId/since carry the card's active range.
+  const text = useMemo(() => {
+    const realOn = priceType === 'real' && isDeflatable(item);
+    const factItem = realOn ? { ...item, data: toReal(item.data, cpiData) } : item;
+    const realYear = realOn && cpiData && cpiData.length ? cpiData[cpiData.length - 1].date.slice(0, 4) : null;
+    return buildFactText(factItem, { factLabel, realYear, rankText, anchorId, since });
+  }, [item, factLabel, priceType, cpiData, rankText, anchorId, since]);
   return (
     <button
       style={{ ...styles.smallBtn, ...(copied ? { background: '#2E7D5B', border: '1px solid #2E7D5B', color: PAPER } : {}) }}
-      title="Copy a press-ready sentence with the latest numbers"
+      title={text}
       onClick={async () => {
-        // Match the copied sentence to what's on screen: deflate first in real
-        // mode so the % changes line up with the chart the reader is seeing.
-        const realOn = priceType === 'real' && isDeflatable(item);
-        const factItem = realOn ? { ...item, data: toReal(item.data, cpiData) } : item;
-        const realYear = realOn && cpiData && cpiData.length ? cpiData[cpiData.length - 1].date.slice(0, 4) : null;
-        const text = buildFactText(factItem, { factLabel, realYear, rankText });
         try {
           await navigator.clipboard.writeText(text);
           setCopied(true);
@@ -1227,7 +1306,8 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
           );
         })()}
         <span style={{ display: 'flex', gap: 8, alignItems: 'center' }} data-export-hide>
-          <CopyFactButton item={item} factLabel={factLabel} priceType={priceType} cpiData={cpiData} rankText={rankText} />
+          <CopyFactButton item={item} factLabel={factLabel} priceType={priceType} cpiData={cpiData} rankText={rankText}
+                          anchorId={activeId} since={cardSince} />
           <button
             onClick={() => downloadCSV(item)}
             style={styles.smallBtn}
