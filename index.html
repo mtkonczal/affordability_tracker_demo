@@ -57,9 +57,9 @@
   html.embed #root { background: #FFFFFF; min-height: 0; }
   html.embed #stage { background: #FFFFFF; box-shadow: none; }
 
-  /* In-app About view (embed mode). The content is fetched from about.html's
-     <main> and injected verbatim, so these rules mirror that page's styles for
-     the classes the content uses (h2/.sec, .lead, .note, tables, .freq badges,
+  /* In-app About view. The content is fetched from about.html's <main> and
+     injected verbatim, so these rules mirror that page's styles for the
+     classes the content uses (h2/.sec, .lead, .note, tables, .freq badges,
      .method boxes), scoped under .at-about and mapped to this page's fonts. */
   .at-about { --rule: rgba(27,42,78,.18); font-size: 14px; }
   .at-about h2 {
@@ -714,14 +714,6 @@ const EMBED = document.documentElement.classList.contains('embed');
 const MENU_BG = EMBED ? '#F4F2E4' : PAPER;
 const PAGE_BG = EMBED ? '#FFFFFF' : BEIGE;
 
-// About-page links, standalone mode: same-tab navigation to about.html,
-// carrying the state hash so its back links can restore the view. In embed
-// mode the iframe must never navigate away (about.html has no height script
-// and no embed chrome) — links open the in-app AboutView instead; see
-// aboutProps in AppMain.
-const ABOUT_LINK_PROPS = {
-  onClick: (e) => { e.currentTarget.href = 'about.html' + window.location.hash; },
-};
 
 // ── Real (inflation-adjusted) transform ─────────────────────────────────────
 // One global Nominal/Real switch drives the whole page. "Real" deflates a
@@ -3076,8 +3068,8 @@ function YearAnchorSelect({ anchorId, setAnchorId }) {
   );
 }
 
-// In-app About view (embed mode): the iframe must never navigate to
-// about.html (no height script, no embed chrome), so the sources & methods
+// In-app About view, both modes (in embed the iframe must never navigate to
+// about.html — no height script, no embed chrome). The sources & methods
 // content is fetched from about.html's <main> — same origin, single source of
 // truth — and injected under the scoped .at-about styles. Cached per page load.
 let ABOUT_HTML_CACHE = null;
@@ -3150,22 +3142,20 @@ function AppMain({ data }) {
   const validState = (c) => c === 'US' || (idx && idx.states.some(s => s.code === c));
   const validMetric = (m) => idx && idx.metrics.some(x => x.id === m);
 
-  // 'about' is a real view only in embed mode; standalone navigates to about.html.
-  const viewIds = EMBED
-    ? ['national', 'state', 'compare', 'map', 'about']
-    : ['national', 'state', 'compare', 'map'];
   const [view, setView] = useState(
-    viewIds.includes(hash.view) && (['national', 'about'].includes(hash.view) || idx) ? hash.view : 'national');
-  // Where "Back to the tracker" returns from the in-app About view.
+    ['national', 'state', 'compare', 'map', 'about'].includes(hash.view) &&
+    (['national', 'about'].includes(hash.view) || idx) ? hash.view : 'national');
+  // About opens in-app in both modes (in embed the iframe must never navigate
+  // to about.html, which has no height script or embed chrome; standalone gets
+  // the same behavior for one navigation model). about.html itself stays live
+  // for direct links. The href is kept so middle-click/new-tab still works.
   const [aboutReturnView, setAboutReturnView] = useState('national');
   const openAbout = (e) => {
     e.preventDefault();
     if (view !== 'about') setAboutReturnView(view);
     setView('about');
   };
-  // Embed: About opens in-app (the iframe must never navigate away).
-  // Standalone: same-tab navigation to about.html, carrying the state hash.
-  const aboutProps = EMBED ? { onClick: openAbout } : ABOUT_LINK_PROPS;
+  const aboutProps = { onClick: openAbout };
   const validAnchor = (a) => ANCHORS.some(x => x.id === a) || /^y:\d{4}$/.test(a || '');
   const [anchorId, setAnchorId] = useState(validAnchor(hash.anchor) ? hash.anchor : '2019');
   const [displayMode, setDisplayMode] = useState(hash.mode === 'pct' ? 'pct' : 'level');
@@ -3231,9 +3221,10 @@ function AppMain({ data }) {
       {!EMBED && (
         <div className="at-pad" style={styles.topbar}>
           <span>Economic Security Project</span>
-          <a href="about.html" {...ABOUT_LINK_PROPS} style={{
+          <a href="about.html" {...aboutProps} style={{
             color: PAPER, textDecoration: 'none',
-            borderBottom: '1px dotted rgba(244,236,216,.5)', paddingBottom: 1,
+            borderBottom: view === 'about' ? '1px solid #FBF7EE' : '1px dotted rgba(244,236,216,.5)',
+            paddingBottom: 1,
           }}>About the data →</a>
         </div>
       )}
