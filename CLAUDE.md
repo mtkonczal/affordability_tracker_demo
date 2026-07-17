@@ -183,4 +183,3 @@ loudly when absent).
   come from unpkg (known perf trade-off, deliberate for now).
 - No state CPI exists. Never add or imply state-level price indexes; the
   About page and state view say this explicitly.
-- `backup_index.html` is an old design iteration kept for reference.

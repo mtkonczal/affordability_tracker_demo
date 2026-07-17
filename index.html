@@ -125,12 +125,21 @@ const ANCHORS = [
   { id: '2000', label: 'Since 2000',     phrase: 'since 2000' },
   { id: 'max',  label: 'Max',            phrase: 'all-time' },
 ];
-function anchorById(id) { return ANCHORS.find(a => a.id === id) || ANCHORS[1]; }
+// A custom start year picked from the dropdown is a synthetic anchor id of the
+// form "y:YYYY" (e.g. "y:2015"). It flows through the same one-start-date
+// pipeline as the presets: anchorById gives it a label/phrase, anchorDate
+// resolves it to Jan 1 of that year.
+function isYearAnchor(id) { return typeof id === 'string' && id.slice(0, 2) === 'y:'; }
+function anchorById(id) {
+  if (isYearAnchor(id)) { const y = id.slice(2); return { id, label: y, phrase: 'since ' + y }; }
+  return ANCHORS.find(a => a.id === id) || ANCHORS[1];
+}
 function anchorDate(id, data) {
   if (id === '1y')  { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d.toISOString().slice(0, 10); }
   if (id === '2025') return '2025-01-01';
   if (id === '2019') return '2019-12-01';
   if (id === '2000') return '2000-01-01';
+  if (isYearAnchor(id)) return id.slice(2) + '-01-01';
   return (data && data.length) ? data[0].date : '1900-01-01';
 }
 
@@ -1051,7 +1060,20 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
     };
   }, [chartReady, item, cardSince, accent, displayMode, priceType, overlayItem]);
 
-  const change = pctChange(srcData, cardSince);
+  let change = pctChange(srcData, cardSince);
+  // If the anchor predates this series (e.g. a global "since 2000" or a custom
+  // 2000 on a series that only starts in 2006), pctChange finds no reading
+  // at/before the anchor and returns null. Fall back to the change since the
+  // earliest available reading — the same base the chart draws from — instead
+  // of showing a misleading 0.0%. When we clamp, remember the true start so the
+  // label reads "since Mar 2006", not "since 2000".
+  let clampedStart = null;
+  if (change == null && visibleData.length >= 2 && visibleData[0].value) {
+    const base = visibleData[0].value;
+    change = ((visibleData[visibleData.length - 1].value - base) / base) * 100;
+    clampedStart = visibleData[0].date;
+  }
+  const activePhrase = clampedStart ? 'since ' + fmtDate(clampedStart) : active.phrase;
   const up = change != null && change >= 0;
   const bad = item.invert_color ? !up : up;
   const changeColorFor = (v) => (item.invert_color ? v < 0 : v >= 0) ? WARM_RED : '#2E7D5B';
@@ -1072,8 +1094,8 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
     ? (headlineVal >= 0 ? '+' : '') + headlineVal.toFixed(1) + '%'
     : fmtVal(headlineVal, displayUnits);
   const changeText = asPct
-    ? (up ? '↑ ' : '↓ ') + active.phrase
-    : (up ? '↑ +' : '↓ ') + Math.abs(change || 0).toFixed(1) + '% ' + active.phrase;
+    ? (up ? '↑ ' : '↓ ') + activePhrase
+    : (up ? '↑ +' : '↓ ') + Math.abs(change || 0).toFixed(1) + '% ' + activePhrase;
 
   return (
     <div ref={cardRef} style={{
@@ -1219,7 +1241,7 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
               try {
                 await downloadCardAsPNG({
                   chartCanvas, item, accent,
-                  headlineText, changeText, changeColor, rangeLabel: active.phrase,
+                  headlineText, changeText, changeColor, rangeLabel: activePhrase,
                 });
               } catch (err) { console.error('PNG export failed', err); }
             }}
@@ -2797,12 +2819,13 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
                   padding: '12px 16px', marginBottom: 16,
                 }}>
                   <span style={styles.controlLabel}>Measure from</span>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                     {ANCHORS.map(a => (
                       <button key={a.id} onClick={() => setAnchorId(a.id)} style={styles.anchorBtn(a.id === anchorId)}>
                         {a.label}
                       </button>
                     ))}
+                    <YearAnchorSelect anchorId={anchorId} setAnchorId={setAnchorId} />
                   </div>
                   <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2875,6 +2898,38 @@ function parseHash() {
   return out;
 }
 
+// Custom start-year picker for the "Measure from" bars. Fills the gap between
+// the presets (e.g. "since 2010", "since 2021") without adding an end-date
+// control — the x-axis always ends at the latest reading. Styled to match
+// anchorBtn; a chosen year sets the synthetic "y:YYYY" anchor.
+function YearAnchorSelect({ anchorId, setAnchorId }) {
+  const isCustom = typeof anchorId === 'string' && anchorId.slice(0, 2) === 'y:';
+  const curYear = new Date().getFullYear();
+  const years = [];
+  for (let y = curYear; y >= 2000; y--) years.push(y);
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex' }}>
+      <select
+        value={isCustom ? anchorId.slice(2) : ''}
+        onChange={(e) => { if (e.target.value) setAnchorId('y:' + e.target.value); }}
+        title="Measure from a custom start year"
+        style={{
+          ...styles.anchorBtn(isCustom),
+          appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none',
+          paddingRight: 24, lineHeight: 1.2,
+        }}
+      >
+        <option value="" disabled>Year…</option>
+        {years.map(y => <option key={y} value={y}>{y}</option>)}
+      </select>
+      <span style={{
+        position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)',
+        pointerEvents: 'none', fontSize: 9, color: isCustom ? PAPER : MUTE,
+      }}>▾</span>
+    </span>
+  );
+}
+
 function AppMain({ data }) {
   const idx = window.AFFORDABILITY_STATES;
   const hash = useMemo(parseHash, []);
@@ -2885,7 +2940,8 @@ function AppMain({ data }) {
 
   const [view, setView] = useState(
     ['national', 'state', 'compare', 'map'].includes(hash.view) && (hash.view === 'national' || idx) ? hash.view : 'national');
-  const [anchorId, setAnchorId] = useState(ANCHORS.some(a => a.id === hash.anchor) ? hash.anchor : '2019');
+  const validAnchor = (a) => ANCHORS.some(x => x.id === a) || /^y:\d{4}$/.test(a || '');
+  const [anchorId, setAnchorId] = useState(validAnchor(hash.anchor) ? hash.anchor : '2019');
   const [displayMode, setDisplayMode] = useState(hash.mode === 'pct' ? 'pct' : 'level');
   const [priceType, setPriceType] = useState(hash.type === 'real' ? 'real' : 'nominal');
   const [stateCode, setStateCode] = useState(validState(hash.state) ? hash.state : 'CA');
@@ -3009,12 +3065,13 @@ function AppMain({ data }) {
       {view !== 'map' && (
       <div className="at-pad at-controls" style={styles.controls}>
         <span style={styles.controlLabel}>Measure from</span>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           {ANCHORS.map(a => (
             <button key={a.id} onClick={() => setAnchorId(a.id)} style={styles.anchorBtn(a.id === anchorId)}>
               {a.label}
             </button>
           ))}
+          <YearAnchorSelect anchorId={anchorId} setAnchorId={setAnchorId} />
         </div>
         <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
