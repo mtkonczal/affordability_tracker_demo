@@ -8,18 +8,17 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Inter+Tight:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 
 <style>
   :root {
-    --navy: #1B2A4E;
+    --navy: #2c3254;
     --red: #E04E39;
-    --beige: #F4ECD8;
-    --paper: #FBF7EE;
+    --beige: #f4f2e4;
+    --paper: #FFFDF2;
     --ink: #0E1320;
     --mute: #6B6E78;
     --soft: #9A9CA3;
-    --rule: rgba(27,42,78,.18);
+    --rule: rgba(44,50,84,.18);
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -27,46 +26,46 @@
     background: #0E1320; color: var(--ink);
   }
   .stage { background: var(--beige); min-height: 100vh; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
-  .serif { font-family: 'Source Serif 4', Georgia, serif; }
-  .display { font-family: 'Inter Tight', system-ui, sans-serif; }
+  .serif { font-family: 'Public Sans', system-ui, sans-serif; }
+  .display { font-family: 'Public Sans', system-ui, sans-serif; }
 
   .topbar {
     background: var(--navy); color: var(--paper);
     padding: 16px 56px;
     display: flex; justify-content: space-between; align-items: center;
-    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-family: 'Public Sans', system-ui, sans-serif;
     font-size: 11px; letter-spacing: .18em; text-transform: uppercase; font-weight: 600;
   }
-  .topbar a { color: var(--paper); text-decoration: none; border-bottom: 1px dotted rgba(244,236,216,.5); padding-bottom: 1px; }
+  .topbar a { color: var(--paper); text-decoration: none; border-bottom: 1px dotted rgba(244,242,228,.5); padding-bottom: 1px; }
 
   header.hero {
     background: var(--navy); color: var(--paper);
     padding: 56px 56px 48px;
   }
   .kicker {
-    font-family: 'Source Serif 4', Georgia, serif;
+    font-family: 'Public Sans', system-ui, sans-serif;
     font-size: 26px; font-weight: 600; color: var(--red); margin-bottom: 16px;
   }
   h1 {
-    font-family: 'Source Serif 4', Georgia, serif;
+    font-family: 'Public Sans', system-ui, sans-serif;
     font-size: 52px; line-height: 1.06; letter-spacing: -.02em; font-weight: 500;
     max-width: 900px; margin-bottom: 22px;
   }
   .dek {
-    font-family: 'Source Serif 4', Georgia, serif;
+    font-family: 'Public Sans', system-ui, sans-serif;
     font-size: 19px; line-height: 1.55; color: #E8C9A8; max-width: 760px; font-style: italic;
   }
 
   main { padding: 44px 56px 64px; max-width: 1180px; }
 
   h2 {
-    font-family: 'Source Serif 4', Georgia, serif;
+    font-family: 'Public Sans', system-ui, sans-serif;
     font-size: 27px; font-weight: 500; margin: 44px 0 6px;
-    padding-bottom: 8px; border-bottom: 1px solid rgba(27,42,78,.25);
+    padding-bottom: 8px; border-bottom: 1px solid rgba(44,50,84,.25);
     display: flex; align-items: baseline; gap: 14px;
   }
   h2 .sec {
-    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-family: 'Public Sans', system-ui, sans-serif;
     font-size: 12px; letter-spacing: .22em; text-transform: uppercase;
     font-weight: 700; color: var(--red);
   }
@@ -80,18 +79,18 @@
     border: 1px solid var(--rule); font-size: 13.5px;
   }
   th {
-    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-family: 'Public Sans', system-ui, sans-serif;
     font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
     font-weight: 700; color: var(--mute); text-align: left;
     padding: 10px 14px; border-bottom: 1px solid var(--rule);
-    background: rgba(27,42,78,.045);
+    background: rgba(44,50,84,.045);
   }
-  td { padding: 11px 14px; border-bottom: 1px solid rgba(27,42,78,.09); vertical-align: top; line-height: 1.5; }
+  td { padding: 11px 14px; border-bottom: 1px solid rgba(44,50,84,.09); vertical-align: top; line-height: 1.5; }
   tr:last-child td { border-bottom: none; }
   td b { font-weight: 600; }
   td a { color: var(--navy); }
   .freq {
-    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-family: 'Public Sans', system-ui, sans-serif;
     display: inline-block; font-size: 10.5px; font-weight: 700;
     letter-spacing: .06em; text-transform: uppercase;
     padding: 2px 8px; border-radius: 10px; white-space: nowrap;
@@ -106,7 +105,7 @@
     padding: 16px 20px; margin: 14px 0; max-width: 860px;
   }
   .method h3 {
-    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-family: 'Public Sans', system-ui, sans-serif;
     font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
     font-weight: 700; color: var(--navy); margin-bottom: 6px;
   }
@@ -115,9 +114,9 @@
 
   footer {
     padding: 22px 56px 48px;
-    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-family: 'Public Sans', system-ui, sans-serif;
     font-size: 11px; color: var(--mute); letter-spacing: .08em; text-transform: uppercase;
-    border-top: 1px solid rgba(27,42,78,.2); margin: 0 56px;
+    border-top: 1px solid rgba(44,50,84,.2); margin: 0 56px;
     display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
     padding-left: 0; padding-right: 0;
   }

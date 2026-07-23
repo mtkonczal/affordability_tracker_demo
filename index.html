@@ -8,7 +8,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Inter+Tight:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<!-- ESP Publico Banner (Medium), embedded as a data URI so it loads inside the
+     sandboxed embed iframe (null origin). Injects an @font-face; see below. -->
+<script src="assets/fonts_publico.js"></script>
 
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -18,10 +20,22 @@
     background: #0E1320;
     color: #0E1320;
   }
-  [style*="Publico"] { font-family: 'Source Serif 4', Georgia, serif !important; }
-  [style*="Neue Haas Grotesk"] { font-family: 'Inter Tight', system-ui, sans-serif !important; }
+  /* ESP licensed Publico Banner (Medium) is embedded as a data URI by
+     assets/fonts_publico.js (loaded below) — a self-hosted .otf would be
+     CORS-blocked inside the sandboxed embed iframe. Reserved for large
+     emphasis numbers only. */
+  /* Type decision (July 2026): Public Sans everywhere — labels, headings, chart
+     text, body — with Publico Banner reserved only for large emphasis numbers.
+     The two hooks below fold the former serif (Publico) and display (Neue Haas)
+     layers down to Public Sans; the third, equal-specificity but later rule
+     re-promotes just the elements explicitly tagged "Publico Banner" inline.
+     (Attribute selectors have equal specificity, so source order decides:
+     "Publico Banner" also matches [style*="Publico"], and the later rule wins.) */
+  [style*="Publico"] { font-family: 'Public Sans', system-ui, sans-serif !important; }
+  [style*="Neue Haas Grotesk"] { font-family: 'Public Sans', system-ui, sans-serif !important; }
+  [style*="Publico Banner"] { font-family: 'Publico Banner', Georgia, serif !important; }
   #root { display: flex; justify-content: center; min-height: 100vh; background: #0E1320; }
-  #stage { background: #F4ECD8; box-shadow: 0 30px 80px rgba(0,0,0,.5); width: 100%; flex-shrink: 0; }
+  #stage { background: #f4f2e4; box-shadow: 0 30px 80px rgba(0,0,0,.5); width: 100%; flex-shrink: 0; }
 
   /* Card grid items must allow shrinking below their min-content so the
      auto-fit minmax() track can actually compress the chart canvas with
@@ -61,15 +75,15 @@
      injected verbatim, so these rules mirror that page's styles for the
      classes the content uses (h2/.sec, .lead, .note, tables, .freq badges,
      .method boxes), scoped under .at-about and mapped to this page's fonts. */
-  .at-about { --rule: rgba(27,42,78,.18); font-size: 14px; }
+  .at-about { --rule: rgba(44,50,84,.18); font-size: 14px; }
   .at-about h2 {
-    font-family: Publico, Georgia, serif;
-    font-size: 27px; font-weight: 500; margin: 44px 0 6px;
-    padding-bottom: 8px; border-bottom: 1px solid rgba(27,42,78,.25);
+    font-family: 'Public Sans', system-ui, sans-serif;
+    font-size: 27px; font-weight: 600; margin: 44px 0 6px;
+    padding-bottom: 8px; border-bottom: 1px solid rgba(44,50,84,.25);
     display: flex; align-items: baseline; gap: 14px;
   }
   .at-about h2 .sec {
-    font-family: "Neue Haas Grotesk Display Pro", sans-serif;
+    font-family: 'Public Sans', system-ui, sans-serif;
     font-size: 12px; letter-spacing: .22em; text-transform: uppercase;
     font-weight: 700; color: #E04E39;
   }
@@ -78,22 +92,22 @@
   .at-about p.note { margin: 12px 0; font-size: 13.5px; line-height: 1.6; color: #6B6E78; max-width: 820px; }
   .at-about .table-wrap { overflow-x: auto; margin: 18px 0 8px; }
   .at-about table {
-    width: 100%; border-collapse: collapse; background: #FBF7EE;
+    width: 100%; border-collapse: collapse; background: #FFFDF2;
     border: 1px solid var(--rule); font-size: 13.5px;
   }
   .at-about th {
-    font-family: "Neue Haas Grotesk Display Pro", sans-serif;
+    font-family: 'Public Sans', system-ui, sans-serif;
     font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
     font-weight: 700; color: #6B6E78; text-align: left;
     padding: 10px 14px; border-bottom: 1px solid var(--rule);
-    background: rgba(27,42,78,.045);
+    background: rgba(44,50,84,.045);
   }
-  .at-about td { padding: 11px 14px; border-bottom: 1px solid rgba(27,42,78,.09); vertical-align: top; line-height: 1.5; }
+  .at-about td { padding: 11px 14px; border-bottom: 1px solid rgba(44,50,84,.09); vertical-align: top; line-height: 1.5; }
   .at-about tr:last-child td { border-bottom: none; }
   .at-about td b { font-weight: 600; }
-  .at-about td a { color: #1B2A4E; }
+  .at-about td a { color: #2c3254; }
   .at-about .freq {
-    font-family: "Neue Haas Grotesk Display Pro", sans-serif;
+    font-family: 'Public Sans', system-ui, sans-serif;
     display: inline-block; font-size: 10.5px; font-weight: 700;
     letter-spacing: .06em; text-transform: uppercase;
     padding: 2px 8px; border-radius: 10px; white-space: nowrap;
@@ -103,13 +117,13 @@
   .at-about .freq.q { background: #FBF2DC; color: #B5820A; }
   .at-about .freq.a { background: #FBE7E7; color: #B33636; }
   .at-about .method {
-    background: #FBF7EE; border: 1px solid var(--rule); border-left: 3px solid #E04E39;
+    background: #FFFDF2; border: 1px solid var(--rule); border-left: 3px solid #E04E39;
     padding: 16px 20px; margin: 14px 0; max-width: 860px;
   }
   .at-about .method h3 {
-    font-family: "Neue Haas Grotesk Display Pro", sans-serif;
+    font-family: 'Public Sans', system-ui, sans-serif;
     font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
-    font-weight: 700; color: #1B2A4E; margin-bottom: 6px;
+    font-weight: 700; color: #2c3254; margin-bottom: 6px;
   }
   .at-about .method p { font-size: 13.5px; line-height: 1.6; }
   .at-about .method p + p { margin-top: 8px; }
@@ -138,11 +152,11 @@
 (function() {
 // ── Shared utilities ─────────────────────────────────────────────────────────
 const ESP = {
-  warmNavy:  '#1B2A4E',
+  warmNavy:  '#2c3254',
   warmRed:   '#E04E39',
-  beige:     '#F4ECD8',
+  beige:     '#f4f2e4',
   ink:       '#0E1320',
-  paper:     '#FBF7EE',
+  paper:     '#FFFDF2',
   mute:      '#6B6E78',
   softMute:  '#9A9CA3',
   green:     '#2E7D5B',
@@ -242,12 +256,12 @@ async function downloadCardAsPNG({
   ctx.scale(SCALE, SCALE);
   ctx.textBaseline = 'alphabetic';
 
-  const PAPER = '#FBF7EE';
+  const PAPER = '#FFFDF2';
   const INK   = '#0E1320';
-  const NAVY  = '#1B2A4E';
+  const NAVY  = '#2c3254';
   const MUTE  = '#6B6E78';
-  const SERIF   = '"Source Serif 4", Georgia, serif';
-  const DISPLAY = '"Inter Tight", system-ui, sans-serif';
+  const SERIF   = '"Publico Banner", Georgia, serif';
+  const DISPLAY = '"Public Sans", system-ui, sans-serif';
 
   // Background
   ctx.fillStyle = PAPER;
@@ -292,7 +306,7 @@ async function downloadCardAsPNG({
   ctx.fillText(today, W - padX, 134);
 
   // Header divider
-  ctx.strokeStyle = 'rgba(27,42,78,.18)';
+  ctx.strokeStyle = 'rgba(44,50,84,.18)';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(padX, 180);
@@ -322,7 +336,7 @@ async function downloadCardAsPNG({
   let titleSize = 56;
   ctx.fillStyle = INK;
   for (; titleSize >= 32; titleSize -= 2) {
-    ctx.font = `500 ${titleSize}px ${SERIF}`;
+    ctx.font = `600 ${titleSize}px ${DISPLAY}`;
     if (ctx.measureText(item.label).width <= titleMaxWidth) break;
   }
   ctx.fillText(item.label, padX, cardTop + 110);
@@ -351,7 +365,7 @@ async function downloadCardAsPNG({
     }
   } else if (item.subtitle) {
     ctx.fillStyle = MUTE;
-    ctx.font = `italic 22px ${SERIF}`;
+    ctx.font = `italic 22px ${DISPLAY}`;
     ctx.fillText(item.subtitle, padX, cardTop + 145);
   }
 
@@ -385,7 +399,7 @@ async function downloadCardAsPNG({
 
   // ── Footer ──────────────────────────────────────────────────────────────
   const footerY = H - 50;
-  ctx.strokeStyle = 'rgba(27,42,78,.12)';
+  ctx.strokeStyle = 'rgba(44,50,84,.12)';
   ctx.beginPath();
   ctx.moveTo(padX, footerY - 28);
   ctx.lineTo(W - padX, footerY - 28);
@@ -699,19 +713,20 @@ const { ESP, fmtVal, fmtDate, ordinal, pctChange, valueAt, sliceFrom, downloadCS
         ANCHORS, anchorById, anchorDate, buildFactText, loadDataFile } = window;
 const { useState, useMemo, useEffect, useRef } = React;
 
-const NAVY = '#1B2A4E';
+const NAVY = '#2c3254';
 const WARM_RED = '#E04E39';
-const BEIGE = '#F4ECD8';
-const PAPER = '#FBF7EE';
+const BEIGE = '#f4f2e4';
+const PAPER = '#FFFDF2';
 const INK = '#0E1320';
 const MUTE = '#6B6E78';
 const SOFT = '#9A9CA3';
 
 // Embed mode (?embed=1): iframe on the ESP site, which brings its own header.
 // The navy topper is dropped, the view tabs move into a light menu bar, the
-// menu bars go #F4F2E4 and the chart area goes white (comms/dev request).
+// menu bars go ESP cream #FFFDF2 to match the ESP site header (comms request,
+// July 2026) and the chart area stays white.
 const EMBED = document.documentElement.classList.contains('embed');
-const MENU_BG = EMBED ? '#F4F2E4' : PAPER;
+const MENU_BG = EMBED ? '#FFFDF2' : PAPER;
 const PAGE_BG = EMBED ? '#FFFFFF' : BEIGE;
 
 
@@ -776,11 +791,40 @@ const FIPS_TO_POSTAL = {
   '54':'WV','55':'WI','56':'WY',
 };
 
-// Distinct colors assigned to pinned states in the compare view. No hard cap
-// on how many states can be pinned — beyond 12 the colors cycle (tooltips and
-// chips still name every line).
-const PIN_COLORS = ['#E04E39', '#7C3AED', '#0D9488', '#B45309', '#DB2777', '#2563EB',
-                    '#059669', '#64748B', '#CA8A04', '#0E7490', '#BE123C', '#4D7C0F'];
+// ESP brand chart palette (comms request, July 2026). Series begin with ESP
+// navy, green and gold, then stay within a muted, warm range — no neon. This
+// is the front-end source of truth for chart color; it overrides the
+// per-category hexes still baked into the data payloads by fetch_data.R, so no
+// data refresh is needed. (To make it permanent, port these into fetch_data.R.)
+const ESP_SERIES = ['#2c3254', '#70ad8f', '#ebc382', '#472b51', '#b0645f', '#7f8c53', '#c98a3c'];
+// National single-series cards are colored by category, preserving the
+// one-family-per-category cue while pulling every family into the ESP palette.
+const ESP_CATEGORY_COLOR = {
+  big:       '#2c3254', // Warm Navy
+  labor:     '#70ad8f', // Soft Green
+  groceries: '#ebc382', // Warm Gold
+  daily:     '#472b51', // Deep Purple
+  debt:      '#b0645f', // muted brick (replaces the former neon red)
+};
+// State-view metrics carry no `category` (states_index.js), so map them by id
+// into the same ESP families: work/wages → green, housing → navy, daily →
+// purple, health → gold, debt → brick.
+const ESP_METRIC_COLOR = {
+  wages: '#70ad8f', hourly_earnings: '#70ad8f', real_hourly_earnings: '#70ad8f',
+  income: '#70ad8f', unemployment: '#70ad8f', income_20th: '#70ad8f', income_80th: '#70ad8f',
+  home_prices: '#2c3254', rent: '#2c3254', zori_rent: '#2c3254', rent_hours: '#2c3254', rent_burden: '#2c3254',
+  electricity_bill: '#472b51',
+  aca_benchmark_premium: '#ebc382', uninsured_rate: '#ebc382',
+  debt_per_capita: '#b0645f', studentloan_per_capita: '#b0645f', cc_delinquency_90: '#b0645f',
+};
+function espColorFor(item) {
+  if (!item) return ESP_SERIES[0];
+  return ESP_CATEGORY_COLOR[item.category] || ESP_METRIC_COLOR[item.id] || item.color || ESP_SERIES[0];
+}
+
+// Distinct colors assigned to pinned states in the compare view; beyond the
+// palette length the colors cycle (tooltips and chips still name every line).
+const PIN_COLORS = ESP_SERIES;
 
 // Lazy-load Chart.js + date adapter once
 let chartJsPromise = null;
@@ -846,7 +890,7 @@ const styles = {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
     fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
     fontSize: 11, letterSpacing: '.18em', textTransform: 'uppercase', fontWeight: 600,
-    borderBottom: '1px solid rgba(244,236,216,.12)',
+    borderBottom: '1px solid rgba(244,242,228,.12)',
   },
   hero: {
     background: NAVY, color: PAPER,
@@ -870,7 +914,7 @@ const styles = {
     fontStyle: 'italic',
   },
   controls: {
-    background: MENU_BG, borderBottom: `1px solid rgba(27,42,78,.18)`,
+    background: MENU_BG, borderBottom: `1px solid rgba(44,50,84,.18)`,
     padding: '16px 56px',
     display: 'flex', alignItems: 'center', gap: 20,
   },
@@ -879,16 +923,18 @@ const styles = {
     fontSize: 11, letterSpacing: '.22em', textTransform: 'uppercase',
     fontWeight: 700, color: MUTE,
   },
+  // Standalone tabs sit on the dark navy hero, so they keep the inverse
+  // treatment (active = cream, inactive = light-on-navy); shape is squared
+  // to match everything else. In embed the light variant below is used.
   viewTab: (active) => ({
     fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
     fontSize: 15, fontWeight: active ? 700 : 600,
     background: active ? PAPER : 'transparent',
     color: active ? NAVY : 'rgba(244,238,225,.85)',
-    border: `1.5px solid ${active ? PAPER : 'rgba(244,238,225,.32)'}`,
-    padding: '12px 22px',
+    border: `1px solid ${active ? PAPER : 'rgba(244,238,225,.32)'}`,
+    padding: '12px 24px', borderRadius: 3,
     cursor: 'pointer',
     transition: 'all .15s',
-    boxShadow: active ? '0 2px 0 rgba(0,0,0,.18)' : 'none',
   }),
   // Embed-mode variant: the tabs sit on the light menu bar, not the navy hero.
   viewTabLight: (active) => ({
@@ -896,68 +942,70 @@ const styles = {
     fontSize: 15, fontWeight: active ? 700 : 600,
     background: active ? NAVY : 'transparent',
     color: active ? PAPER : NAVY,
-    border: `1.5px solid ${active ? NAVY : 'rgba(27,42,78,.35)'}`,
-    padding: '12px 22px',
+    border: `1px solid ${NAVY}`,
+    padding: '12px 24px', borderRadius: 3,
     cursor: 'pointer',
     transition: 'all .15s',
   }),
+  // One shared active/inactive treatment for every light-surface control:
+  // active = navy fill + cream text; inactive = transparent (reads as the
+  // cream bar) + navy text + 1px navy border. Rectangular, ~3px radius.
   anchorBtn: (active) => ({
     fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
     fontSize: 12, fontWeight: active ? 700 : 600, letterSpacing: '.03em',
     background: active ? NAVY : 'transparent',
-    color: active ? PAPER : INK,
-    border: `1.5px solid ${active ? NAVY : 'rgba(27,42,78,.22)'}`,
-    padding: '7px 13px', cursor: 'pointer', borderRadius: 100,
+    color: active ? PAPER : NAVY,
+    border: `1px solid ${NAVY}`,
+    padding: '7px 15px', cursor: 'pointer', borderRadius: 3,
     transition: 'all .12s',
   }),
   modeBtn: (active) => ({
     fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
     fontSize: 11, fontWeight: 700, letterSpacing: '.05em',
     background: active ? NAVY : 'transparent',
-    color: active ? PAPER : MUTE,
-    border: `1px solid ${active ? NAVY : 'rgba(27,42,78,.22)'}`,
-    padding: '6px 11px', cursor: 'pointer',
+    color: active ? PAPER : NAVY,
+    border: `1px solid ${NAVY}`,
+    padding: '6px 13px', cursor: 'pointer', borderRadius: 3,
+    transition: 'all .12s',
   }),
+  // The category-accent tint is gone from the selected state (comms request:
+  // no accent colors for ordinary UI states). The chip's chart-line color
+  // survives only as the small filled checkBox mark inside the chip.
   checkChip: (on, accent) => ({
     fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
     fontSize: 13, fontWeight: 600,
-    padding: '6px 12px 6px 10px',
-    border: `1px solid ${on ? accent : 'rgba(27,42,78,.16)'}`,
-    background: on ? hexToRgba(accent, 0.08) : 'transparent',
-    color: on ? INK : SOFT,
+    padding: '6px 13px 6px 11px',
+    border: `1px solid ${NAVY}`,
+    background: on ? NAVY : 'transparent',
+    color: on ? PAPER : NAVY,
     cursor: 'pointer',
     transition: 'all .12s',
-    borderRadius: 6,
+    borderRadius: 3,
     display: 'inline-flex', alignItems: 'center', gap: 8,
   }),
   checkBox: (on, accent) => ({
-    width: 14, height: 14, borderRadius: 3,
-    border: `1.5px solid ${on ? accent : 'rgba(27,42,78,.25)'}`,
+    width: 13, height: 13, borderRadius: 2,
+    border: `1.5px solid ${on ? accent : 'rgba(44,50,84,.4)'}`,
     background: on ? accent : 'transparent',
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    color: PAPER, fontSize: 10, fontWeight: 800,
+    color: PAPER, fontSize: 9, fontWeight: 800,
     flexShrink: 0,
   }),
   catPill: (state) => ({
     // state: 'all' | 'some' | 'none'
     fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
     fontSize: 11, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase',
-    padding: '6px 12px',
-    border: `1.5px solid ${state === 'none' ? 'rgba(27,42,78,.22)' : NAVY}`,
-    background: state === 'all' ? NAVY : state === 'some' ? hexToRgba(NAVY, 0.08) : 'transparent',
-    color: state === 'all' ? PAPER : state === 'some' ? NAVY : MUTE,
-    cursor: 'pointer', borderRadius: 100, transition: 'all .12s',
+    padding: '6px 13px',
+    border: `1px solid ${NAVY}`,
+    background: state === 'all' ? NAVY : state === 'some' ? hexToRgba(NAVY, 0.10) : 'transparent',
+    color: state === 'all' ? PAPER : NAVY,
+    cursor: 'pointer', borderRadius: 3, transition: 'all .12s',
     flexShrink: 0,
   }),
   sectionHead: {
     display: 'flex', alignItems: 'baseline', gap: 14,
     marginBottom: 18, paddingBottom: 8,
-    borderBottom: `1px solid rgba(27,42,78,.2)`,
-  },
-  sectionLabel: {
-    fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-    fontSize: 12, letterSpacing: '.22em', textTransform: 'uppercase',
-    fontWeight: 700, color: WARM_RED,
+    borderBottom: `1px solid rgba(44,50,84,.2)`,
   },
   sectionTitle: {
     fontFamily: 'Publico, Georgia, serif', fontSize: 28, fontWeight: 500,
@@ -970,15 +1018,15 @@ const styles = {
     fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
     fontSize: 9, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase',
     background: 'transparent', color: NAVY,
-    border: `1px solid rgba(27,42,78,.25)`,
-    padding: '3px 7px', cursor: 'pointer',
+    border: `1px solid ${NAVY}`,
+    padding: '4px 9px', cursor: 'pointer', borderRadius: 3,
     display: 'inline-flex', alignItems: 'center', gap: 4,
   },
   select: {
     fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
-    fontSize: 14, fontWeight: 600, color: INK,
-    background: PAPER, border: `1.5px solid ${NAVY}`,
-    padding: '9px 12px', cursor: 'pointer', borderRadius: 4,
+    fontSize: 14, fontWeight: 600, color: NAVY,
+    background: PAPER, border: `1px solid ${NAVY}`,
+    padding: '9px 12px', cursor: 'pointer', borderRadius: 3,
   },
 };
 
@@ -1021,7 +1069,7 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
   const chartRef = useRef(null);
   const cardRef = useRef(null);
   const [chartReady, setChartReady] = useState(!!window.Chart);
-  const accent = item.color || WARM_RED;
+  const accent = espColorFor(item);
 
   // Per-card override of the global anchor; resets when the global changes.
   const [ovr, setOvr] = useState(null);
@@ -1148,13 +1196,13 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
             backgroundColor: NAVY,
             titleColor: '#9BA8C2',
             bodyColor: PAPER,
-            borderColor: 'rgba(244,236,216,.15)',
+            borderColor: 'rgba(244,242,228,.15)',
             borderWidth: 1,
             padding: 11,
             cornerRadius: 4,
             displayColors: false,
-            titleFont: { size: 10, family: 'Inter Tight, system-ui', weight: '600' },
-            bodyFont:  { size: 13, family: 'Source Serif 4, Georgia, serif', weight: '600' },
+            titleFont: { size: 10, family: 'Public Sans, system-ui', weight: '600' },
+            bodyFont:  { size: 13, family: 'Public Sans, system-ui', weight: '600' },
             callbacks: {
               title: (c) => fmtDate(c[0].parsed.x, { year: 'numeric', month: 'long' }),
               label: (c) => `  ${datasets.length > 1 ? c.dataset.label + ': ' : ''}` + fmtVal(c.parsed.y, displayUnits),
@@ -1171,7 +1219,7 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
             border: { display: false },
             ticks: {
               color: MUTE,
-              font: { size: 10, family: 'Inter Tight, system-ui' },
+              font: { size: 10, family: 'Public Sans, system-ui' },
               maxTicksLimit: activeId === '1y' ? 6 : 5,
             },
           },
@@ -1179,11 +1227,11 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
             position: 'right',
             min: yMin,
             max: yMax,
-            grid: { color: 'rgba(27,42,78,.08)', drawTicks: false },
+            grid: { color: 'rgba(44,50,84,.08)', drawTicks: false },
             border: { display: false },
             ticks: {
               color: MUTE,
-              font: { size: 10, family: 'Inter Tight, system-ui' },
+              font: { size: 10, family: 'Public Sans, system-ui' },
               stepSize: yStep,
               callback: (v) => fmtVal(v, displayUnits),
             },
@@ -1237,7 +1285,6 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
   return (
     <div ref={cardRef} style={{
       background: 'transparent',
-      borderTop: `2px solid ${accent}`,
       padding: '18px 22px 16px',
       display: 'flex', flexDirection: 'column', gap: 12,
     }}>
@@ -1278,7 +1325,7 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
           fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
           fontSize: 11, display: 'flex', gap: 14, flexWrap: 'wrap',
           padding: '7px 10px', background: hexToRgba(NAVY, 0.045),
-          border: `1px solid rgba(27,42,78,.08)`, borderRadius: 4,
+          border: `1px solid rgba(44,50,84,.08)`, borderRadius: 4,
         }}>
           {badge(b25, "Since Jan '25")}
           {badge(b19, "Since Dec '19")}
@@ -1306,9 +1353,9 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
                 fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
                 fontSize: 10, fontWeight: 600, letterSpacing: '.05em',
                 background: on ? NAVY : 'transparent',
-                color: on ? PAPER : MUTE,
-                border: `1px solid ${on ? NAVY : 'rgba(27,42,78,.18)'}`,
-                padding: '3px 8px',
+                color: on ? PAPER : NAVY,
+                border: `1px solid ${NAVY}`,
+                padding: '3px 9px', borderRadius: 3,
                 cursor: 'pointer',
                 transition: 'all .12s',
               }}
@@ -1335,7 +1382,7 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
         fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
         fontSize: 9, color: SOFT, letterSpacing: '.1em',
         textTransform: 'uppercase',
-        paddingTop: 8, borderTop: `1px solid rgba(27,42,78,.1)`,
+        paddingTop: 8, borderTop: `1px solid rgba(44,50,84,.1)`,
         display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
       }}>
         {(() => {
@@ -1353,7 +1400,7 @@ function ChartCard({ item, anchorId, displayMode, priceType, cpiData, overlayIte
               href={srcUrl}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: SOFT, textDecoration: 'none', borderBottom: '1px dotted rgba(27,42,78,.3)' }}
+              style={{ color: SOFT, textDecoration: 'none', borderBottom: '1px dotted rgba(44,50,84,.3)' }}
               onMouseEnter={(e) => { e.currentTarget.style.color = NAVY; }}
               onMouseLeave={(e) => { e.currentTarget.style.color = SOFT; }}
             >
@@ -1430,7 +1477,7 @@ function Heatmap({ items, priceType, cpiData }) {
   if (!items.length) {
     return (
       <div style={{
-        background: PAPER, border: `1px solid rgba(27,42,78,.18)`,
+        background: PAPER, border: `1px solid rgba(44,50,84,.18)`,
         padding: '32px', textAlign: 'center',
         fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE,
       }}>
@@ -1448,7 +1495,7 @@ function Heatmap({ items, priceType, cpiData }) {
   const cumCell = { borderLeft: `2px solid ${BEIGE}` };
 
   return (
-    <div style={{ background: PAPER, border: `1px solid rgba(27,42,78,.18)`, padding: '24px' }}>
+    <div style={{ background: PAPER, border: `1px solid rgba(44,50,84,.18)`, padding: '24px' }}>
       <div style={{
         display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8,
         fontSize: 10, color: MUTE, marginBottom: 14,
@@ -1549,7 +1596,7 @@ function HoursToAfford({ data }) {
       </div>
       {rows.map(r => (
         <div key={r.label}>
-          <div style={{ fontFamily: 'Publico, Georgia, serif', fontSize: 40, fontWeight: 500, lineHeight: 1 }}>
+          <div style={{ fontFamily: 'Publico Banner, Georgia, serif', fontSize: 40, fontWeight: 500, lineHeight: 1 }}>
             {r.hours.toFixed(1)}<span style={{ fontSize: 18 }}> hrs</span>
           </div>
           <div style={{
@@ -1640,7 +1687,7 @@ function NationalView({ data, anchorId, displayMode, priceType }) {
     <React.Fragment>
       {/* Selection chips, grouped by category with family colors */}
       <div className="at-pad" style={{
-        background: MENU_BG, borderBottom: `1px solid rgba(27,42,78,.18)`,
+        background: MENU_BG, borderBottom: `1px solid rgba(44,50,84,.18)`,
         padding: '16px 56px 18px',
         display: 'flex', flexDirection: 'column', gap: 10,
       }}>
@@ -1649,7 +1696,7 @@ function NationalView({ data, anchorId, displayMode, priceType }) {
           const nOn = items.filter(i => selectedIds.has(i.id)).length;
           const open = openCats.has(cat.id);
           return (
-            <div key={cat.id} style={{ borderBottom: '1px solid rgba(27,42,78,.08)', paddingBottom: open ? 12 : 6 }}>
+            <div key={cat.id} style={{ borderBottom: '1px solid rgba(44,50,84,.08)', paddingBottom: open ? 12 : 6 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <button onClick={() => toggleCategory(cat.id)}
                         title="Select or clear every metric in this category"
@@ -1675,7 +1722,15 @@ function NationalView({ data, anchorId, displayMode, priceType }) {
                   <span style={{
                     fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
                     fontSize: 11, fontWeight: 700, color: NAVY, flexShrink: 0,
-                  }}>{open ? '▴ Hide' : '▾ Show'}</span>
+                    display: 'inline-flex', alignItems: 'center', gap: 8,
+                  }}>
+                    {open ? 'Hide' : 'Show'}
+                    <svg width="11" height="8" viewBox="0 0 11 8" fill="none" aria-hidden="true"
+                      style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
+                      <path d="M1 1.5L5.5 6L10 1.5" stroke={NAVY} strokeWidth="1.75"
+                        strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
                 </button>
               </div>
               {open && (
@@ -1683,8 +1738,8 @@ function NationalView({ data, anchorId, displayMode, priceType }) {
                   {items.map(item => {
                     const on = selectedIds.has(item.id);
                     return (
-                      <button key={item.id} onClick={() => toggleId(item.id)} style={styles.checkChip(on, item.color || WARM_RED)}>
-                        <span style={styles.checkBox(on, item.color || WARM_RED)}>{on ? '✓' : ''}</span>
+                      <button key={item.id} onClick={() => toggleId(item.id)} style={styles.checkChip(on, espColorFor(item))}>
+                        <span style={styles.checkBox(on, espColorFor(item))}>{on ? '✓' : ''}</span>
                         {item.label}
                       </button>
                     );
@@ -1710,7 +1765,6 @@ function NationalView({ data, anchorId, displayMode, priceType }) {
         <HoursToAfford data={data} />
 
         <div className="at-section-head" style={styles.sectionHead}>
-          <span style={styles.sectionLabel}>§01</span>
           <span style={styles.sectionTitle}>
             {selectedItems.length === 0
               ? 'Nothing selected'
@@ -1723,7 +1777,7 @@ function NationalView({ data, anchorId, displayMode, priceType }) {
 
         {selectedItems.length === 0 ? (
           <div style={{
-            background: PAPER, border: `1px solid rgba(27,42,78,.18)`,
+            background: PAPER, border: `1px solid rgba(44,50,84,.18)`,
             padding: '48px 32px', textAlign: 'center',
             fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE,
           }}>
@@ -1731,7 +1785,7 @@ function NationalView({ data, anchorId, displayMode, priceType }) {
           </div>
         ) : (
           <div className="at-cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 0,
-            border: `1px solid rgba(27,42,78,.14)`, background: 'transparent' }}>
+            border: `1px solid rgba(44,50,84,.14)`, background: 'transparent' }}>
             {selectedItems.map((item, i) => {
               const col = i % 2;
               const row = Math.floor(i / 2);
@@ -1739,8 +1793,8 @@ function NationalView({ data, anchorId, displayMode, priceType }) {
               const lastRow = Math.floor((total - 1) / 2);
               return (
                 <div key={item.id} className="at-card" style={{
-                  borderRight: col < 1 ? `1px solid rgba(27,42,78,.14)` : 'none',
-                  borderBottom: row < lastRow ? `1px solid rgba(27,42,78,.14)` : 'none',
+                  borderRight: col < 1 ? `1px solid rgba(44,50,84,.14)` : 'none',
+                  borderBottom: row < lastRow ? `1px solid rgba(44,50,84,.14)` : 'none',
                 }}>
                   <ChartCard item={item} anchorId={anchorId} displayMode={displayMode}
                              priceType={priceType} cpiData={cpiData} />
@@ -1751,7 +1805,6 @@ function NationalView({ data, anchorId, displayMode, priceType }) {
         )}
 
         <div className="at-section-head" style={{ ...styles.sectionHead, marginTop: 48 }}>
-          <span style={styles.sectionLabel}>§02</span>
           <span style={styles.sectionTitle}>Year by year</span>
           <span className="at-section-dek" style={styles.sectionDek}>YoY % change each January, plus the two anchors, for the metrics you've selected.</span>
         </div>
@@ -1811,7 +1864,7 @@ function StateView({ data, code, setCode, anchorId, displayMode, priceType }) {
 
   const picker = (
     <div className="at-pad" style={{
-      background: MENU_BG, borderBottom: `1px solid rgba(27,42,78,.18)`,
+      background: MENU_BG, borderBottom: `1px solid rgba(44,50,84,.18)`,
       padding: '16px 56px',
       display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
     }}>
@@ -1884,7 +1937,6 @@ function StateView({ data, code, setCode, anchorId, displayMode, priceType }) {
       {picker}
       <div className="at-pad" style={{ padding: '36px 56px 56px' }}>
         <div className="at-section-head" style={styles.sectionHead}>
-          <span style={styles.sectionLabel}>§01</span>
           <span style={styles.sectionTitle}>{sd.name}</span>
           <span className="at-section-dek" style={styles.sectionDek}>
             {isUS
@@ -1894,15 +1946,15 @@ function StateView({ data, code, setCode, anchorId, displayMode, priceType }) {
         </div>
 
         <div className="at-cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 0,
-          border: `1px solid rgba(27,42,78,.14)` }}>
+          border: `1px solid rgba(44,50,84,.14)` }}>
           {cards.map(({ item, factLabel, rankNote, rankText }, i) => {
             const col = i % 2;
             const row = Math.floor(i / 2);
             const lastRow = Math.floor((cards.length - 1) / 2);
             return (
               <div key={item.id} className="at-card" style={{
-                borderRight: col < 1 ? `1px solid rgba(27,42,78,.14)` : 'none',
-                borderBottom: row < lastRow ? `1px solid rgba(27,42,78,.14)` : 'none',
+                borderRight: col < 1 ? `1px solid rgba(44,50,84,.14)` : 'none',
+                borderBottom: row < lastRow ? `1px solid rgba(44,50,84,.14)` : 'none',
               }}>
                 <ChartCard item={item} anchorId={anchorId} displayMode={displayMode}
                            priceType={priceType} cpiData={cpiData}
@@ -1916,7 +1968,6 @@ function StateView({ data, code, setCode, anchorId, displayMode, priceType }) {
         {annualTiles.length > 0 && (
           <React.Fragment>
             <div className="at-section-head" style={{ ...styles.sectionHead, marginTop: 48 }}>
-              <span style={styles.sectionLabel}>§02</span>
               <span style={styles.sectionTitle}>The annual picture</span>
               <span className="at-section-dek" style={styles.sectionDek}>
                 Costs and debt burdens published once a year — context, not live tracking.
@@ -1925,15 +1976,15 @@ function StateView({ data, code, setCode, anchorId, displayMode, priceType }) {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
               {annualTiles.map(a => (
                 <div key={a.id} style={{
-                  background: PAPER, border: `1px solid rgba(27,42,78,.16)`,
-                  borderTop: `2px solid ${WARM_RED}`, padding: '16px 18px',
+                  background: PAPER, border: `1px solid rgba(44,50,84,.16)`,
+                  padding: '16px 18px',
                 }}>
                   <div style={{
                     fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
                     fontSize: 10, letterSpacing: '.14em', textTransform: 'uppercase',
                     fontWeight: 700, color: MUTE, marginBottom: 8,
                   }}>{a.label}</div>
-                  <div style={{ fontFamily: 'Publico, Georgia, serif', fontSize: 30, fontWeight: 500 }}>
+                  <div style={{ fontFamily: 'Publico Banner, Georgia, serif', fontSize: 30, fontWeight: 500 }}>
                     {fmtAnnual(sd.annual[a.id], a.units)}
                   </div>
                   <div style={{ fontSize: 11, color: MUTE, marginTop: 6, lineHeight: 1.45 }}>
@@ -2013,10 +2064,10 @@ function CompareChart({ metric, seriesList, anchorId, displayMode, height = 340 
           legend: { display: false },
           tooltip: {
             backgroundColor: NAVY, titleColor: '#9BA8C2', bodyColor: PAPER,
-            borderColor: 'rgba(244,236,216,.15)', borderWidth: 1, padding: 11,
+            borderColor: 'rgba(244,242,228,.15)', borderWidth: 1, padding: 11,
             cornerRadius: 4, displayColors: true, boxWidth: 8, boxHeight: 8,
-            titleFont: { size: 10, family: 'Inter Tight, system-ui', weight: '600' },
-            bodyFont:  { size: 12, family: 'Inter Tight, system-ui', weight: '600' },
+            titleFont: { size: 10, family: 'Public Sans, system-ui', weight: '600' },
+            bodyFont:  { size: 12, family: 'Public Sans, system-ui', weight: '600' },
             callbacks: {
               title: (c) => fmtDate(c[0].parsed.x, { year: 'numeric', month: 'long' }),
               label: (c) => ` ${c.dataset.label}: ${fmtVal(c.parsed.y, displayUnits)}`,
@@ -2030,14 +2081,14 @@ function CompareChart({ metric, seriesList, anchorId, displayMode, height = 340 
             max: xMax,
             time: { unit: anchorId === '1y' ? 'month' : 'year' },
             grid: { display: false }, border: { display: false },
-            ticks: { color: MUTE, font: { size: 10, family: 'Inter Tight, system-ui' }, maxTicksLimit: 7 },
+            ticks: { color: MUTE, font: { size: 10, family: 'Public Sans, system-ui' }, maxTicksLimit: 7 },
           },
           y: {
             position: 'right',
-            grid: { color: 'rgba(27,42,78,.08)', drawTicks: false },
+            grid: { color: 'rgba(44,50,84,.08)', drawTicks: false },
             border: { display: false },
             ticks: {
-              color: MUTE, font: { size: 10, family: 'Inter Tight, system-ui' },
+              color: MUTE, font: { size: 10, family: 'Public Sans, system-ui' },
               callback: (v) => fmtVal(v, displayUnits),
             },
           },
@@ -2131,7 +2182,7 @@ function USMap({ metric, rows, pinned = [], onPick, periodLabel }) {
   if (err) {
     return (
       <div style={{
-        background: PAPER, border: '1px solid rgba(27,42,78,.18)', padding: '48px 32px',
+        background: PAPER, border: '1px solid rgba(44,50,84,.18)', padding: '48px 32px',
         textAlign: 'center', fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE,
       }}>Could not load the map assets (offline?). The Compare States view has the same data.</div>
     );
@@ -2159,7 +2210,7 @@ function USMap({ metric, rows, pinned = [], onPick, periodLabel }) {
   const legendHi = '≥ ' + fmtVal(scale.hi, metric.units);
 
   return (
-    <div ref={boxRef} style={{ position: 'relative', background: PAPER, border: '1px solid rgba(27,42,78,.18)', padding: '20px 20px 12px' }}>
+    <div ref={boxRef} style={{ position: 'relative', background: PAPER, border: '1px solid rgba(44,50,84,.18)', padding: '20px 20px 12px' }}>
       <svg viewBox="0 0 975 610" style={{ width: '100%', display: 'block' }}>
         {(shapes || []).map(s => {
           const r = byCode[s.code];
@@ -2244,7 +2295,7 @@ function StateBarList({ metric, rows, pinned = [], onPick, periodLabel }) {
   const max = has.length ? has[0].value : 1;
 
   return (
-    <div style={{ background: PAPER, border: '1px solid rgba(27,42,78,.18)', padding: '20px 20px 12px' }}>
+    <div style={{ background: PAPER, border: '1px solid rgba(44,50,84,.18)', padding: '20px 20px 12px' }}>
       <div style={{ fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif' }}>
         {has.map(r => {
           const pi = pinned.indexOf(r.code);
@@ -2267,7 +2318,7 @@ function StateBarList({ metric, rows, pinned = [], onPick, periodLabel }) {
                 {pinColor && <span style={{ width: 9, height: 9, borderRadius: 5, background: pinColor, flexShrink: 0 }} />}
                 {r.name}
               </span>
-              <span style={{ background: 'rgba(27,42,78,.06)', height: 14, position: 'relative' }}>
+              <span style={{ background: 'rgba(44,50,84,.06)', height: 14, position: 'relative' }}>
                 <span style={{
                   position: 'absolute', left: 0, top: 0, bottom: 0,
                   width: `${Math.max(max > 0 ? (r.value / max) * 100 : 0, 0.75)}%`,
@@ -2331,7 +2382,7 @@ async function mapToExportCanvas(svgEl, scale, metric) {
   [0, 0.25, 0.5, 0.75, 1].forEach(t => grad.addColorStop(t, rampColor(t)));
   ctx.fillStyle = grad; ctx.fillRect(lx, ly, lw, lh);
   ctx.fillStyle = INK;
-  ctx.font = '600 13px "Inter Tight", system-ui, sans-serif';
+  ctx.font = '600 13px "Public Sans", system-ui, sans-serif';
   ctx.textAlign = 'right'; ctx.fillText('≤ ' + fmtVal(scale.lo, metric.units), lx - 8, ly + 11);
   ctx.textAlign = 'left';  ctx.fillText('≥ ' + fmtVal(scale.hi, metric.units), lx + lw + 8, ly + 11);
   return canvas;
@@ -2351,10 +2402,10 @@ function barsToExportCanvas(rows, scale, metric) {
 
   const max = has.length ? has[0].value : 1;
   const rankX = 34, nameX = 44, barX = 290, barW = 850, valX = W - 10;
-  const DISPLAY = '"Inter Tight", system-ui, sans-serif';
+  const DISPLAY = '"Public Sans", system-ui, sans-serif';
   has.forEach((r, i) => {
     const y = PAD + i * ROW;
-    ctx.fillStyle = 'rgba(27,42,78,.06)';
+    ctx.fillStyle = 'rgba(44,50,84,.06)';
     ctx.fillRect(barX, y + 5, barW, ROW - 10);
     ctx.fillStyle = scale.color(r.value);
     ctx.fillRect(barX, y + 5, Math.max(max > 0 ? (r.value / max) * barW : 0, 2), ROW - 10);
@@ -2408,12 +2459,12 @@ function ExportFooter({ metric, onCSV, onPNG }) {
       fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
       fontSize: 9, color: SOFT, letterSpacing: '.1em',
       textTransform: 'uppercase',
-      marginTop: 12, paddingTop: 8, borderTop: `1px solid rgba(27,42,78,.1)`,
+      marginTop: 12, paddingTop: 8, borderTop: `1px solid rgba(44,50,84,.1)`,
       display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
     }}>
       {metric.source_url ? (
         <a href={metric.source_url} target="_blank" rel="noopener noreferrer"
-           style={{ color: SOFT, textDecoration: 'none', borderBottom: '1px dotted rgba(27,42,78,.3)' }}
+           style={{ color: SOFT, textDecoration: 'none', borderBottom: '1px dotted rgba(44,50,84,.3)' }}
            onMouseEnter={(e) => { e.currentTarget.style.color = NAVY; }}
            onMouseLeave={(e) => { e.currentTarget.style.color = SOFT; }}>
           Source · {metric.source_label} ↗
@@ -2449,7 +2500,7 @@ function CompareMetricPanel({ metric, data, pinned, names, anchorId, displayMode
   });
 
   return (
-    <div ref={panelRef} style={{ background: 'transparent', borderTop: `2px solid ${metric.color}`, padding: '14px 2px 10px', minWidth: 0 }}>
+    <div ref={panelRef} style={{ background: 'transparent', borderTop: `1px solid rgba(44,50,84,.16)`, padding: '14px 2px 10px', minWidth: 0 }}>
       {compact && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
           <span style={{ fontFamily: 'Publico, Georgia, serif', fontSize: 17, fontWeight: 600, color: INK }}>{metric.label}</span>
@@ -2485,7 +2536,7 @@ function CompareMetricPanel({ metric, data, pinned, names, anchorId, displayMode
           fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
           fontSize: 9, color: SOFT, letterSpacing: '.1em',
           textTransform: 'uppercase',
-          marginTop: 12, paddingTop: 8, borderTop: `1px solid rgba(27,42,78,.1)`,
+          marginTop: 12, paddingTop: 8, borderTop: `1px solid rgba(44,50,84,.1)`,
           display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
         }}>
           {metric.source_url ? (
@@ -2493,7 +2544,7 @@ function CompareMetricPanel({ metric, data, pinned, names, anchorId, displayMode
               href={metric.source_url}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: SOFT, textDecoration: 'none', borderBottom: '1px dotted rgba(27,42,78,.3)' }}
+              style={{ color: SOFT, textDecoration: 'none', borderBottom: '1px dotted rgba(44,50,84,.3)' }}
               onMouseEnter={(e) => { e.currentTarget.style.color = NAVY; }}
               onMouseLeave={(e) => { e.currentTarget.style.color = SOFT; }}
             >
@@ -2603,7 +2654,7 @@ function CompareView({ data, metricIds, setMetricIds, homeState, anchorId, displ
     <React.Fragment>
       {/* Metric picker */}
       <div className="at-pad" style={{
-        background: MENU_BG, borderBottom: `1px solid rgba(27,42,78,.18)`,
+        background: MENU_BG, borderBottom: `1px solid rgba(44,50,84,.18)`,
         padding: '16px 56px',
         display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
       }}>
@@ -2617,10 +2668,10 @@ function CompareView({ data, metricIds, setMetricIds, homeState, anchorId, displ
                 fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
                 fontSize: 13, fontWeight: on ? 700 : 600,
                 padding: '8px 15px',
-                border: `1.5px solid ${on ? NAVY : 'rgba(27,42,78,.22)'}`,
+                border: `1px solid ${NAVY}`,
                 background: on ? NAVY : 'transparent',
-                color: on ? PAPER : INK,
-                cursor: 'pointer', borderRadius: 100,
+                color: on ? PAPER : NAVY,
+                cursor: 'pointer', borderRadius: 3,
               }}>{on && metricIds.length > 1 ? '✓ ' : ''}{m.label}</button>
           );
         })}
@@ -2637,7 +2688,6 @@ function CompareView({ data, metricIds, setMetricIds, homeState, anchorId, displ
         ) : (
           <React.Fragment>
             <div className="at-section-head" style={styles.sectionHead}>
-              <span style={styles.sectionLabel}>§01</span>
               <span style={styles.sectionTitle}>
                 {metrics.length === 1 ? `${metric.label} — pick states to overlay` : `${metrics.length} metrics, side by side`}
               </span>
@@ -2646,7 +2696,7 @@ function CompareView({ data, metricIds, setMetricIds, homeState, anchorId, displ
                   <React.Fragment>
                     {metric.source_url ? (
                       <a href={metric.source_url} target="_blank" rel="noopener noreferrer"
-                         style={{ color: MUTE, textDecoration: 'none', borderBottom: '1px dotted rgba(27,42,78,.3)' }}>
+                         style={{ color: MUTE, textDecoration: 'none', borderBottom: '1px dotted rgba(44,50,84,.3)' }}>
                         {metric.source_label} ↗
                       </a>
                     ) : metric.source_label} · {metric.frequency}
@@ -2661,7 +2711,7 @@ function CompareView({ data, metricIds, setMetricIds, homeState, anchorId, displ
                 <button key={code} onClick={() => togglePin(code)} style={{
                   fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif', fontSize: 12, fontWeight: 700,
                   display: 'inline-flex', alignItems: 'center', gap: 7,
-                  padding: '6px 12px', borderRadius: 100, cursor: 'pointer',
+                  padding: '6px 12px', borderRadius: 3, cursor: 'pointer',
                   border: `1.5px solid ${PIN_COLORS[i % PIN_COLORS.length]}`,
                   background: hexToRgba(PIN_COLORS[i % PIN_COLORS.length], 0.09), color: INK,
                 }} title="Remove from chart">
@@ -2856,7 +2906,7 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
     <React.Fragment>
       {/* Measure picker — single-select: the map shows one metric at a time */}
       <div className="at-pad" style={{
-        background: MENU_BG, borderBottom: `1px solid rgba(27,42,78,.18)`,
+        background: MENU_BG, borderBottom: `1px solid rgba(44,50,84,.18)`,
         padding: '16px 56px',
         display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
       }}>
@@ -2869,10 +2919,10 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
                 fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
                 fontSize: 13, fontWeight: on ? 700 : 600,
                 padding: '8px 15px',
-                border: `1.5px solid ${on ? NAVY : 'rgba(27,42,78,.22)'}`,
+                border: `1px solid ${NAVY}`,
                 background: on ? NAVY : 'transparent',
-                color: on ? PAPER : INK,
-                cursor: 'pointer', borderRadius: 100,
+                color: on ? PAPER : NAVY,
+                cursor: 'pointer', borderRadius: 3,
               }}>{m.label}</button>
           );
         })}
@@ -2886,12 +2936,11 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
         ) : (
           <React.Fragment>
             <div className="at-section-head" style={styles.sectionHead}>
-              <span style={styles.sectionLabel}>§01</span>
               <span style={styles.sectionTitle}>All states — {metric.label}</span>
               <span className="at-section-dek" style={styles.sectionDek}>
                 {metric.source_url ? (
                   <a href={metric.source_url} target="_blank" rel="noopener noreferrer"
-                     style={{ color: MUTE, textDecoration: 'none', borderBottom: '1px dotted rgba(27,42,78,.3)' }}>
+                     style={{ color: MUTE, textDecoration: 'none', borderBottom: '1px dotted rgba(44,50,84,.3)' }}>
                     {metric.source_label} ↗
                   </a>
                 ) : metric.source_label} · {metric.frequency} · click any state to pin it on the chart below.
@@ -2931,7 +2980,6 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
                 controls sit here (not on the global bar) because in the Map
                 view they only shape this chart. */}
             <div className="at-section-head" style={{ ...styles.sectionHead, marginTop: 44 }}>
-              <span style={styles.sectionLabel}>§02</span>
               <span style={styles.sectionTitle}>
                 {pinned.length
                   ? `${metric.label} — ${pinned.length} ${pinned.length === 1 ? 'state' : 'states'} pinned`
@@ -2943,7 +2991,7 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
             </div>
             {pinned.length === 0 ? (
               <div style={{
-                background: PAPER, border: `1px solid rgba(27,42,78,.18)`,
+                background: PAPER, border: `1px solid rgba(44,50,84,.18)`,
                 padding: '36px 32px', textAlign: 'center',
                 fontFamily: 'Publico, Georgia, serif', fontStyle: 'italic', color: MUTE,
               }}>
@@ -2953,7 +3001,7 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
               <React.Fragment>
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap',
-                  background: MENU_BG, border: '1px solid rgba(27,42,78,.15)',
+                  background: MENU_BG, border: '1px solid rgba(44,50,84,.15)',
                   padding: '12px 16px', marginBottom: 16,
                 }}>
                   <span style={styles.controlLabel}>Measure from</span>
@@ -2987,7 +3035,7 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
                     <button key={code} onClick={() => togglePin(code)} style={{
                       fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif', fontSize: 12, fontWeight: 700,
                       display: 'inline-flex', alignItems: 'center', gap: 7,
-                      padding: '6px 12px', borderRadius: 100, cursor: 'pointer',
+                      padding: '6px 12px', borderRadius: 3, cursor: 'pointer',
                       border: `1.5px solid ${PIN_COLORS[i % PIN_COLORS.length]}`,
                       background: hexToRgba(PIN_COLORS[i % PIN_COLORS.length], 0.09), color: INK,
                     }} title="Remove from chart">
@@ -2999,7 +3047,7 @@ function MapView({ data, metricId, setMetricId, anchorId, setAnchorId, priceType
                     style={{ ...styles.smallBtn, border: 'none', textDecoration: 'underline', textUnderlineOffset: 3, fontSize: 10 }}
                   >Clear all</button>
                 </div>
-                <div ref={pinnedChartRef} style={{ background: 'transparent', borderTop: `2px solid ${metric.color}`, padding: '14px 2px 10px' }}>
+                <div ref={pinnedChartRef} style={{ background: 'transparent', borderTop: `1px solid rgba(44,50,84,.16)`, padding: '14px 2px 10px' }}>
                   <CompareChart
                     metric={metric}
                     seriesList={pinned.map((code, i) => {
@@ -3062,8 +3110,13 @@ function YearAnchorSelect({ anchorId, setAnchorId }) {
       </select>
       <span style={{
         position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)',
-        pointerEvents: 'none', fontSize: 9, color: isCustom ? PAPER : MUTE,
-      }}>▾</span>
+        pointerEvents: 'none', display: 'inline-flex', alignItems: 'center',
+      }}>
+        <svg width="10" height="7" viewBox="0 0 11 8" fill="none" aria-hidden="true">
+          <path d="M1 1.5L5.5 6L10 1.5" stroke={isCustom ? PAPER : NAVY} strokeWidth="1.75"
+            strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
     </span>
   );
 }
@@ -3091,7 +3144,7 @@ function AboutView({ onBack }) {
       background: 'none', border: 'none', cursor: 'pointer', padding: '1px 0',
       fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
       fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', fontWeight: 600,
-      color: NAVY, borderBottom: '1px dotted rgba(27,42,78,.45)',
+      color: NAVY, borderBottom: '1px dotted rgba(44,50,84,.45)',
     }}>← Back to the tracker</button>
   );
 
@@ -3220,7 +3273,7 @@ function AppMain({ data }) {
           <span>Economic Security Project</span>
           <a href="about.html" {...aboutProps} style={{
             color: PAPER, textDecoration: 'none',
-            borderBottom: view === 'about' ? '1px solid #FBF7EE' : '1px dotted rgba(244,236,216,.5)',
+            borderBottom: view === 'about' ? '1px solid #FFFDF2' : '1px dotted rgba(244,242,228,.5)',
             paddingBottom: 1,
           }}>About the data →</a>
         </div>
@@ -3261,7 +3314,7 @@ function AppMain({ data }) {
       {/* Embed mode: view tabs on a light bar where the hero used to be */}
       {EMBED && (
         <div className="at-pad" style={{
-          background: MENU_BG, borderBottom: '1px solid rgba(27,42,78,.12)',
+          background: MENU_BG, borderBottom: '1px solid rgba(44,50,84,.12)',
           padding: '18px 56px 16px',
           display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
         }}>
@@ -3285,7 +3338,7 @@ function AppMain({ data }) {
             )}
             <a href="about.html" {...aboutProps} style={{
               color: NAVY, textDecoration: 'none',
-              borderBottom: view === 'about' ? '1px solid #1B2A4E' : '1px dotted rgba(27,42,78,.45)',
+              borderBottom: view === 'about' ? '1px solid #2c3254' : '1px dotted rgba(44,50,84,.45)',
               paddingBottom: 1,
             }}>About the data →</a>
           </span>
@@ -3348,7 +3401,7 @@ function AppMain({ data }) {
       {/* Footer */}
       <div className="at-pad" style={{ padding: '0 56px 48px' }}>
         <div style={{
-          paddingTop: 22, borderTop: `1px solid rgba(27,42,78,.2)`,
+          paddingTop: 22, borderTop: `1px solid rgba(44,50,84,.2)`,
           fontFamily: '"Neue Haas Grotesk Display Pro", sans-serif',
           fontSize: 11, color: MUTE, letterSpacing: '.08em',
           textTransform: 'uppercase',
@@ -3387,7 +3440,7 @@ window.AppMain = AppMain;
     }, [ready]);
 
     // Cream text on the dark standalone surround; ink on the white embed page.
-    const loadColor = document.documentElement.classList.contains('embed') ? '#0E1320' : '#F4ECD8';
+    const loadColor = document.documentElement.classList.contains('embed') ? '#0E1320' : '#f4f2e4';
     if (!data) return <div style={{ color: loadColor, padding: 40, fontFamily: 'system-ui' }}>No data loaded.</div>;
     if (!ready) return <div style={{ color: loadColor, padding: 40, fontFamily: 'system-ui' }}>Loading…</div>;
 

@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Responses to design feedback — Affordability Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --navy: #2c3254;       /* ESP Warm Navy */
+    --cream: #fffdf2;      /* ESP Light Beige (site header) */
+    --beige: #f4f2e4;      /* ESP Beige */
+    --green: #70ad8f;      /* ESP Soft Green (C3 accent) */
+    --gold: #ebc382;       /* ESP Warm Gold */
+    --ink: #232849;        /* Headline black */
+    --body: #3c4164;       /* Text black */
+    --rule: #caccd4;       /* Divider grey */
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Public Sans', system-ui, sans-serif;
+    background: var(--beige); color: var(--body); line-height: 1.6;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 56px 32px 96px; }
+  header.doc {
+    background: var(--cream); border: 1px solid var(--rule);
+    border-left: 4px solid var(--navy);
+    padding: 28px 32px; margin-bottom: 8px;
+  }
+  header.doc .eyebrow {
+    font-size: 11px; letter-spacing: .18em; text-transform: uppercase;
+    font-weight: 700; color: var(--green); margin-bottom: 8px;
+  }
+  header.doc h1 { font-size: 30px; font-weight: 700; color: var(--ink); line-height: 1.15; }
+  header.doc p { margin-top: 10px; font-size: 15px; max-width: 640px; }
+  .frame {
+    background: var(--cream); border: 1px solid var(--rule);
+    padding: 22px 26px; margin: 22px 0 30px; font-size: 14.5px;
+  }
+  .frame b { color: var(--ink); }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; font-size: 12.5px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 4px 11px; border-radius: 3px; font-weight: 700;
+    border: 1px solid var(--navy); background: var(--cream); color: var(--navy);
+    font-size: 11px; letter-spacing: .03em;
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .item {
+    background: #fff; border: 1px solid var(--rule); margin-bottom: 18px;
+  }
+  .item .head {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 18px 24px 14px; border-bottom: 1px solid var(--rule);
+  }
+  .item .num {
+    flex-shrink: 0; width: 30px; height: 30px; border-radius: 3px;
+    background: var(--navy); color: #fff; font-weight: 700; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .item .head h2 { font-size: 18px; font-weight: 700; color: var(--ink); flex: 1; line-height: 1.3; }
+  .badges { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+  .badge {
+    font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+    padding: 4px 9px; border-radius: 3px; white-space: nowrap;
+    text-transform: uppercase; border: 1px solid transparent;
+  }
+  .v-do    { background: #e7f1ec; color: #2f7d5b; border-color: #b9d8c9; }
+  .v-caveat{ background: #fbf2dc; color: #a9770a; border-color: #e6cf94; }
+  .v-check { background: #eceeffa8; color: var(--navy); border-color: #c3c8e0; }
+  .eff-lo  { background: var(--beige); color: var(--body); border-color: var(--rule); }
+  .eff-med { background: var(--beige); color: var(--body); border-color: var(--rule); }
+  .eff-hi  { background: var(--beige); color: var(--body); border-color: var(--rule); }
+  .item .body { padding: 16px 24px 22px; }
+  .item .body p { margin-bottom: 12px; font-size: 14.5px; }
+  .verdict-line { font-size: 13px; color: var(--body); margin-bottom: 14px; }
+  .verdict-line b { color: var(--ink); }
+  ol.steps { margin: 4px 0 0 0; padding-left: 0; counter-reset: step; list-style: none; }
+  ol.steps li {
+    position: relative; padding: 6px 0 6px 34px; font-size: 14px;
+    border-top: 1px dashed var(--rule);
+  }
+  ol.steps li:first-child { border-top: none; }
+  ol.steps li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 0; top: 6px;
+    width: 22px; height: 22px; border-radius: 3px;
+    background: var(--green); color: #fff; font-weight: 700; font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .flag {
+    margin-top: 14px; padding: 11px 15px; background: var(--beige);
+    border-left: 3px solid var(--gold); font-size: 13px; color: var(--body);
+  }
+  .flag b { color: var(--ink); }
+  code { background: var(--beige); padding: 1px 5px; border-radius: 3px; font-size: 12.5px; }
+  .seq { background: var(--cream); border: 1px solid var(--rule); padding: 20px 26px; margin-top: 24px; }
+  .seq h3 { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--navy); margin-bottom: 10px; }
+  .seq p { font-size: 14px; }
+  footer.doc { margin-top: 28px; font-size: 12px; color: #8a8ea0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <div class="eyebrow">Design feedback · working response</div>
+  <h1>Responses to the internal team's tracker feedback</h1>
+  <p>Eight requests from <code>edit_questions.md</code>, each with a recommendation, an
+     effort estimate, and a concrete 1&ndash;2&ndash;3 path. Read in the context that
+     matters: the reviewer sees the tracker <b>embedded in the ESP site</b>
+     (<code>?embed=1</code>), where the navy hero and topbar are hidden, the view
+     tabs sit on a light bar, and backgrounds go white.</p>
+</header>
+
+<div class="frame">
+  <b>One thing shapes almost everything below.</b> The tracker was built with
+  near-ESP values, not exact ones. Its navy is <code>#1B2A4E</code> (ESP navy is
+  <code>#2c3254</code>), its paper is <code>#FBF7EE</code> (ESP cream is
+  <code>#FFFDF2</code>), and its type uses Google substitutes (Source&nbsp;Serif&nbsp;4
+  for Publico, Inter&nbsp;Tight for Neue&nbsp;Haas) rather than the licensed ESP
+  fonts. In embed mode those near-misses sit <b>directly against the real ESP
+  page chrome</b>, which is exactly where the eye catches the mismatch. So the
+  highest-leverage move is a <b>Step&nbsp;0: retokenize</b> &mdash; repoint the
+  <code>NAVY</code>/<code>PAPER</code>/palette constants at ESP's true values and
+  embed the real fonts. Items&nbsp;1, 7, and&nbsp;8 then largely fall out for free.
+  <b>Decided:</b> we are doing the full retokenize as Step&nbsp;0.
+  <div class="legend">
+    <span class="pill"><span class="dot" style="background:#2f7d5b"></span>Recommend</span>
+    <span class="pill"><span class="dot" style="background:#a9770a"></span>Do, with a caveat</span>
+    <span class="pill"><span class="dot" style="background:#2c3254"></span>Confirm scope first</span>
+  </div>
+</div>
+
+<!-- 1 -->
+<div class="item">
+  <div class="head">
+    <div class="num">1</div>
+    <h2>Top navigation background &rarr; ESP cream <code>#FFFDF2</code></h2>
+    <div class="badges"><span class="badge v-do">Recommend</span><span class="badge eff-lo">Effort: Low</span></div>
+  </div>
+  <div class="body">
+    <div class="verdict-line"><b>Verdict:</b> Do it. In embed the "top navigation"
+      is unambiguous &mdash; it's the light view-tabs/controls bar (there is no navy
+      hero in the iframe). Matching it to the ESP site header's cream is a clean win
+      and removes a visible seam between the iframe and the page around it.</div>
+    <ol class="steps">
+      <li>Change the embed menu background from <code>#F4F2E4</code> to <code>#FFFDF2</code> (the <code>MENU_BG</code> constant / embed branch).</li>
+      <li>Set the page/chart surface behind the tabs to the same cream so the bar doesn't float on stark white.</li>
+      <li>Re-check tab contrast on cream in <code>embed_test.html</code> at mobile and desktop widths.</li>
+    </ol>
+    <div class="flag"><b>Note:</b> standalone mode still has the navy hero; this
+      change is embed-scoped, so we won't disturb the standalone look.</div>
+  </div>
+</div>
+
+<!-- 2 -->
+<div class="item">
+  <div class="head">
+    <div class="num">2</div>
+    <h2>Public Sans throughout, Publico Banner only for big emphasis numbers</h2>
+    <div class="badges"><span class="badge v-caveat">Do, with a caveat</span><span class="badge eff-hi">Effort: High</span></div>
+  </div>
+  <div class="body">
+    <div class="verdict-line"><b>Verdict:</b> Strongly on-brand and worth doing, but
+      it's the biggest single change and carries a real tension. The tracker leans on
+      serif in ~40 places (card titles, captions, headline figures). Paring serif back
+      to only large emphasis numbers is a genuine character shift, not a tweak.</div>
+    <ol class="steps">
+      <li>Embed the licensed fonts via <code>@font-face</code> (Public Sans + Publico Banner Medium from the ESP style-guide bundle) and drop the Google substitute links.</li>
+      <li>Reassign the ~40 <code>fontFamily: 'Publico&hellip;'</code> declarations to Public Sans, keeping Publico Banner only on the big figures (e.g. the Hours-of-Work stats).</li>
+      <li>Fold the Neue&nbsp;Haas Grotesk layer (eyebrows, labels, tabs, axis text) down to Public Sans too, then sweep every view for stragglers.</li>
+    </ol>
+    <div class="flag"><b>Decided &mdash; follow the note literally.</b>
+      Public Sans for <em>everything</em> &mdash; labels, headings, chart text, body
+      &mdash; with Publico Banner reserved only for the large emphasis figures. This
+      also means the current Neue&nbsp;Haas Grotesk substitute (Inter&nbsp;Tight),
+      used today on eyebrows, labels, tabs, and axis text, gets replaced by Public
+      Sans rather than the real Neue&nbsp;Haas. Step&nbsp;2 of the item above therefore
+      folds both serif <em>and</em> the Neue&nbsp;Haas layer down to Public Sans.</div>
+  </div>
+</div>
+
+<!-- 3 -->
+<div class="item">
+  <div class="head">
+    <div class="num">3</div>
+    <h2>Remove the <code>&sect;01</code> / <code>&sect;02</code> section labels</h2>
+    <div class="badges"><span class="badge v-do">Recommend</span><span class="badge eff-lo">Effort: Low</span></div>
+  </div>
+  <div class="body">
+    <div class="verdict-line"><b>Verdict:</b> Do it. They're decorative; the headings
+      carry the hierarchy on their own. Six occurrences, no logic depends on them.</div>
+    <ol class="steps">
+      <li>Delete the six <code>&sect;0x</code> label spans.</li>
+      <li>Remove the now-unused <code>sectionLabel</code> style.</li>
+      <li>Adjust <code>sectionHead</code> spacing so the heading sits right without the eyebrow.</li>
+    </ol>
+  </div>
+</div>
+
+<!-- 4 -->
+<div class="item">
+  <div class="head">
+    <div class="num">4</div>
+    <h2>Simplify metric-card borders &mdash; drop the colored top rule</h2>
+    <div class="badges"><span class="badge v-do">Recommend</span><span class="badge eff-med">Effort: Medium</span></div>
+  </div>
+  <div class="body">
+    <div class="verdict-line"><b>Verdict:</b> Agree, and this is the single biggest
+      reason the dashboard reads as several unrelated widgets. The per-card colored top
+      rule is doing the damage; category color already survives in the card's small
+      eyebrow label, so we keep the association without the noise.</div>
+    <ol class="steps">
+      <li>Replace the four <code>borderTop: 2px solid {accent}</code> rules with one neutral 1px border around the whole card.</li>
+      <li>Keep category color only in the small eyebrow label (or a short accent tick).</li>
+      <li>Reconcile with the existing grid dividers (<code>border-right</code>) so borders don't double up.</li>
+    </ol>
+  </div>
+</div>
+
+<!-- 5 -->
+<div class="item">
+  <div class="head">
+    <div class="num">5</div>
+    <h2>Chart colors start with ESP navy / green / gold</h2>
+    <div class="badges"><span class="badge v-caveat">Do, with a caveat</span><span class="badge eff-hi">Effort: High</span></div>
+  </div>
+  <div class="body">
+    <div class="verdict-line"><b>Verdict:</b> Right instinct, hardest item. Series
+      colors are <b>baked into the data payloads by <code>fetch_data.R</code></b> in
+      per-category families (debt=red, labor=green, etc.). Re-running the R pipeline
+      needs API keys and a fresh multi-minute pull; a front-end color override is
+      cleaner, reversible, and needs no data refresh.</div>
+    <ol class="steps">
+      <li>Add an ordered ESP palette constant &mdash; <code>#2c3254</code>, <code>#70ad8f</code>, <code>#ebc382</code>, then muted warm extensions &mdash; in <code>index.html</code>.</li>
+      <li>Override <code>item.color</code> and <code>PIN_COLORS</code> at render from that palette instead of the baked hexes.</li>
+      <li>Tune single-series national cards into the muted range; order navy/green/gold in the multi-line Compare and pinned-state views.</li>
+    </ol>
+    <div class="flag"><b>Caveat:</b> today's category colors <em>encode meaning</em>
+      (a color family per category). Flattening everything to navy/green/gold first
+      weakens that coding. We can preserve the semantics by recoloring each family to a
+      muted ESP tone instead of a strict global order &mdash; the two goals partly
+      conflict, so we'll pick a balance.</div>
+  </div>
+</div>
+
+<!-- 6 -->
+<div class="item">
+  <div class="head">
+    <div class="num">6</div>
+    <h2>Replace "Show" triangles with a single navy chevron</h2>
+    <div class="badges"><span class="badge v-do">Recommend</span><span class="badge eff-lo">Effort: Low</span></div>
+  </div>
+  <div class="body">
+    <div class="verdict-line"><b>Verdict:</b> Fine, minor polish. Two spots use text
+      triangles (<code>&#9662; Show</code>). An inline SVG chevron matches the "Read
+      More" affordance on the ESP site and rotates cleanly.</div>
+    <ol class="steps">
+      <li>Swap the text triangles for a small inline SVG chevron, navy, ~1.75px stroke to match the ESP "Read More" arrow.</li>
+      <li>Leave clear space between the word "Show" and the icon.</li>
+      <li>Rotate 180&deg; on expand via a CSS transform.</li>
+    </ol>
+  </div>
+</div>
+
+<!-- 7 -->
+<div class="item">
+  <div class="head">
+    <div class="num">7</div>
+    <h2>One rectangular button shape throughout (2&ndash;4px radius, 1px navy border)</h2>
+    <div class="badges"><span class="badge v-do">Recommend</span><span class="badge eff-med">Effort: Medium</span></div>
+  </div>
+  <div class="body">
+    <div class="verdict-line"><b>Verdict:</b> Good consistency win. Today it's mixed:
+      anchor buttons and category pills are full pills (<code>borderRadius: 100</code>),
+      chips are 6px, view tabs have none. Mechanical, but many touch points.</div>
+    <ol class="steps">
+      <li>Set a shared ~3px radius and 1px navy border across tabs, anchor/date controls, view toggles, category pills, card range buttons, and CSV/PNG buttons.</li>
+      <li>Add uniform horizontal padding.</li>
+      <li>Sweep each view (National / State / Compare / Map) for stragglers.</li>
+    </ol>
+  </div>
+</div>
+
+<!-- 8 -->
+<div class="item">
+  <div class="head">
+    <div class="num">8</div>
+    <h2>One clear active / inactive treatment</h2>
+    <div class="badges"><span class="badge v-do">Recommend</span><span class="badge eff-med">Effort: Medium</span></div>
+  </div>
+  <div class="body">
+    <div class="verdict-line"><b>Verdict:</b> Agree. Most controls are already
+      navy-active / white-text. The real outlier is the metric chip, which tints the
+      <em>category accent</em> for its selected state &mdash; exactly the "different
+      accent colors for ordinary states" the note wants gone.</div>
+    <ol class="steps">
+      <li>Standardize every control: active = navy <code>#2c3254</code> + white; inactive = cream + navy text + 1px navy border.</li>
+      <li>Move the chip's selected state off the category accent onto the navy standard.</li>
+      <li>Decide whether any chip&rarr;line color link survives (e.g. keep a small color dot on the chip).</li>
+    </ol>
+    <div class="flag"><b>Caveat:</b> the chip's accent tint currently ties a chip to
+      its chart-line color. Removing it loses that visual link &mdash; acceptable, but
+      worth naming so it's a choice, not an accident.</div>
+  </div>
+</div>
+
+<div class="seq">
+  <h3>Suggested sequence</h3>
+  <p><b>Step 0</b> retokenize to true ESP values + embed real fonts &rarr;
+     then the cohesion pass (<b>1, 3, 4, 6, 7, 8</b>) which is mostly mechanical &rarr;
+     then the two heavy, decision-bearing items (<b>2</b> typography and <b>5</b> chart
+     palette) last. Effort at a glance: 3 and 6 are quick; 1, 4, 7, 8 are moderate;
+     2 and 5 are the lifts.</p>
+</div>
+
+<footer class="doc">
+  Working draft &mdash; both decisions are settled: full retokenize as Step&nbsp;0,
+  and Public Sans literally everywhere except large emphasis numbers. This page is styled in the true ESP
+  palette (navy <code>#2c3254</code>, cream <code>#FFFDF2</code>, green
+  <code>#70ad8f</code>, gold <code>#ebc382</code>) as a live sample of the target.
+</footer>
+
+</div>
+</body>
+</html>
